@@ -1,0 +1,78 @@
+﻿@page
+@using WalleeCharging.Price
+@model IndexModel
+@{
+    ViewData["Title"] = "Home page";
+}
+
+<h1>Charging Parameters</h1>
+<form method="post">
+    <div>
+        <label>Max meter power [watts]</label>
+        <input type="number" name="maxTotalPowerWatts" value="@Model.ChargingParameters.MaxTotalPowerWatts"> 
+    </div>
+    <div>
+        <label>Max day-ahead price [eurocent/MWh]</label>
+        <input id="maxPriceEurocentPerMWh" type="number" name="maxPriceEurocentPerMWh" value="@Model.ChargingParameters.MaxPriceEurocentPerMWh"> 
+    </div>
+    <div>
+        <input type="submit">
+    </div>
+</form>
+
+<h1>Prices</h1>
+<canvas id="priceChart" style="max-height: 50vh;"></canvas>
+
+<h1>Activity</h1>
+<ul id="activityList">
+</ul>
+
+<script src="~/js/signalr/dist/browser/signalr.js"></script>
+<script src="~/js/signalr-subscriber.js"></script>
+
+<!-- price chart -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const ctx = document.getElementById('priceChart');
+
+  const prices = [
+    @foreach (ElectricityPrice price in Model.Prices)
+    {
+        <text>@(price.PriceEurocentPerMWh),</text>
+    }
+  ]
+
+  const labels = [
+      @foreach (int i in Enumerable.Range(0, Model.Prices.Count()))
+      {
+        <text>@(i),</text>
+      }
+  ]
+
+  const chart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Prices',
+        data: prices
+      }]
+    },
+    options: {
+        events: ['click'],
+        scales: {
+            y: {
+            beginAtZero: true
+            }
+        }
+    }
+  });
+
+  function clickHandler(click)
+  {
+    const points = chart.getElementsAtEventForMode(click, 'nearest', {intersect: true}, true);
+    const clickedPrice = prices[points[0].index];
+    document.getElementById('maxPriceEurocentPerMWh').setAttribute('value', clickedPrice);
+  }
+  chart.canvas.onclick = clickHandler;
+</script>

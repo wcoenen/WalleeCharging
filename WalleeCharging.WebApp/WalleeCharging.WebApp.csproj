@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>WalleeCharging.WebApp</RootNamespace>
+    <UserSecretsId>9cd6908c-91c7-4402-ac9e-e198cb3543f2</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NewtonSoft.Json" Version="13.0.3" />
+    <PackageReference Include="system.data.sqlite" Version="1.0.118" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WalleeCharging.Core\WalleeCharging.Core.csproj" />
+  </ItemGroup>
+
+</Project>
