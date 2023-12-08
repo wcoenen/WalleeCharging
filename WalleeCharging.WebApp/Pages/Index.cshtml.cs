@@ -16,6 +16,7 @@ public class IndexModel : PageModel
         _logger = logger;
         _database = database;
         ChargingParameters = new ChargingControlParameters();
+        Prices = new ElectricityPrice[0];
     }
 
     public ChargingControlParameters ChargingParameters { get; set; }
