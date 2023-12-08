@@ -22,8 +22,6 @@ public class SignalRNotificationSink : INotificationSink
         float currentLimitAmpere,
         string message)
     {
-        NoSleep.PreventSleep();
-
         // see also WalleeCharging.WebApp/wwwroot/js/signalRSubscriber.js
         return _hubContext.Clients.All.SendAsync(
                     "ReceiveControlLoopNotification",
