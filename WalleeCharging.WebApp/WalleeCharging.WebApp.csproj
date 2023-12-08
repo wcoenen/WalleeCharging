@@ -9,12 +9,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="NewtonSoft.Json" Version="13.0.3" />
-    <PackageReference Include="system.data.sqlite" Version="1.0.118" />
+    <ProjectReference Include="..\WalleeCharging.Core\WalleeCharging.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\WalleeCharging.Core\WalleeCharging.Core.csproj" />
+    <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.0" />
   </ItemGroup>
 
 </Project>

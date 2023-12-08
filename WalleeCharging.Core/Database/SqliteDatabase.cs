@@ -1,28 +1,25 @@
 ﻿using System.Configuration;
 using System.Data.Common;
-using System.Data.SQLite;
+using Microsoft.Data.Sqlite;
 using WalleeCharging.Price;
 
 namespace WalleeCharging.Database;
 
 public class SqliteDatabase : IDatabase, IDisposable
 {
-    private readonly SQLiteConnection _connection;
+    private readonly SqliteConnection _connection;
 
     public SqliteDatabase(string databaseFilePath )
     {
+        bool newDatabase = !File.Exists(databaseFilePath);
+        
         string connectionString = $"Data Source={databaseFilePath}";
-        if (!File.Exists(databaseFilePath))
+        _connection = new SqliteConnection(connectionString);
+        _connection.Open();
+
+        if (newDatabase)
         {
-            SQLiteConnection.CreateFile(databaseFilePath);
-            _connection = new SQLiteConnection(connectionString);
-            _connection.Open();
             InitializeDatabaseSchema();
-        }
-        else
-        {
-            _connection = new SQLiteConnection($"Data Source={databaseFilePath}");
-            _connection.Open();
         }
     }
 
@@ -41,7 +38,7 @@ public class SqliteDatabase : IDatabase, IDisposable
 
     private void ExecuteNonQuery(string sql)
     {
-        using (var command = new SQLiteCommand(sql, _connection))
+        using (var command = new SqliteCommand(sql, _connection))
         {
             command.ExecuteNonQuery();
         }
@@ -51,7 +48,7 @@ public class SqliteDatabase : IDatabase, IDisposable
     {
         string sql = "SELECT UnixTime, MaxTotalPowerWatts, MaxPriceEurocentPerMWh"
             +" FROM ChargingParameters ORDER BY UnixTime DESC LIMIT 1;";
-        using (var command = new SQLiteCommand(sql, _connection))
+        using (var command = new SqliteCommand(sql, _connection))
         {
             var reader = await command.ExecuteReaderAsync();
             if (reader.HasRows)
@@ -74,7 +71,7 @@ public class SqliteDatabase : IDatabase, IDisposable
     {
         string sql ="INSERT INTO ChargingParameters(UnixTime, MaxTotalPowerWatts, MaxPriceEurocentPerMWh) "
             +"VALUES(@time,@power,@price);";
-        using (var command = new SQLiteCommand(sql, _connection))
+        using (var command = new SqliteCommand(sql, _connection))
         {
             command.Parameters.AddWithValue("time", DateTimeOffset.UtcNow.ToUnixTimeSeconds());
             command.Parameters.AddWithValue("power", chargingParameters.MaxTotalPowerWatts);
@@ -92,7 +89,7 @@ public class SqliteDatabase : IDatabase, IDisposable
 
         string sql = "SELECT UnixTime, PriceEurocentPerMWh"
             +" FROM DayAheadPrice WHERE UnixTime = @unixTime";
-        using (var command = new SQLiteCommand(sql, _connection))
+        using (var command = new SqliteCommand(sql, _connection))
         {
             command.Parameters.AddWithValue("unixTime", DateTimeToUnix(hourTime));
             var reader = await command.ExecuteReaderAsync();
@@ -120,7 +117,7 @@ public class SqliteDatabase : IDatabase, IDisposable
         string sql = "SELECT UnixTime, PriceEurocentPerMWh"
             +" FROM DayAheadPrice WHERE UnixTime >= @startTime AND UnixTime <= @endTime";
 
-        using (var command = new SQLiteCommand(sql, _connection))
+        using (var command = new SqliteCommand(sql, _connection))
         {
             command.Parameters.AddWithValue("startTime", DateTimeToUnix(timeStart));
             command.Parameters.AddWithValue("endTime", DateTimeToUnix(timeEnd));
@@ -143,7 +140,7 @@ public class SqliteDatabase : IDatabase, IDisposable
         string sql ="INSERT INTO DayAheadPrice(UnixTime, PriceEurocentPerMWh) VALUES(@time,@price);";
         foreach (var price in prices)
         {
-            using (var command = new SQLiteCommand(sql, _connection))
+            using (var command = new SqliteCommand(sql, _connection))
             {
                 command.Parameters.AddWithValue("time", DateTimeToUnix(price.Time));
                 command.Parameters.AddWithValue("price", price.PriceEurocentPerMWh);

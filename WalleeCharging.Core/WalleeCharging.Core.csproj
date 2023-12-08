@@ -9,7 +9,7 @@
   <ItemGroup>
     <PackageReference Include="NewtonSoft.Json" Version="13.0.3" />
     <PackageReference Include="NModbus" Version="3.0.81" />
-    <PackageReference Include="system.data.sqlite" Version="1.0.118" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
   </ItemGroup>
 
 </Project>
