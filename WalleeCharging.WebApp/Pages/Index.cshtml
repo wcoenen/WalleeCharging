@@ -43,7 +43,7 @@ const timezoneOffsetHours = Math.floor((new Date()).getTimezoneOffset() / 60);
 const labels = [
     @foreach (var price in Model.Prices)
     {
-      <text>(@(price.Time.Hour) - timezoneOffsetHours),</text>
+      <text>((@(price.Time.Hour) - timezoneOffsetHours) % 24),</text>
     }
 ]
 </script>
