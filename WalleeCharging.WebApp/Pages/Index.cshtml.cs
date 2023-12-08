@@ -27,9 +27,9 @@ public class IndexModel : PageModel
         ChargingParameters = await _database.GetChargingParametersAsync();
 
         var prices = new List<ElectricityPrice>();
-        DateTime startTodayUtc = DateTime.Today.ToUniversalTime();
-        DateTime endTomorrowUtc = DateTime.Today.AddDays(1).ToUniversalTime();
-        await foreach (var price in _database.GetPricesAsync(startTodayUtc, endTomorrowUtc))
+        DateTime oneHourAgo = DateTime.UtcNow.AddHours(-1);
+        DateTime endTomorrowUtc = DateTime.Today.AddDays(2).ToUniversalTime();
+        await foreach (var price in _database.GetPricesAsync(oneHourAgo, endTomorrowUtc))
         {
             prices.Add(price);
         }

@@ -42,10 +42,11 @@
     }
   ]
 
+  const timezoneOffsetHours = Math.floor((new Date()).getTimezoneOffset() / 60);
   const labels = [
-      @foreach (int i in Enumerable.Range(0, Model.Prices.Count()))
+      @foreach (var price in Model.Prices)
       {
-        <text>@(i),</text>
+        <text>(new Date("@(price.Time)")).getHours() - timezoneOffsetHours,</text>
       }
   ]
 
