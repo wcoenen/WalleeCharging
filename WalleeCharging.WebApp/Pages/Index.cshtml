@@ -31,49 +31,29 @@
 <script src="~/js/signalr-subscriber.js"></script>
 
 <!-- price chart -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-  const ctx = document.getElementById('priceChart');
-
-  const prices = [
-    @foreach (ElectricityPrice price in Model.Prices)
-    {
-        <text>@(price.PriceEurocentPerMWh),</text>
-    }
-  ]
-
-  const timezoneOffsetHours = Math.floor((new Date()).getTimezoneOffset() / 60);
-  const labels = [
-      @foreach (var price in Model.Prices)
-      {
-        <text>(new Date("@(price.Time)")).getHours() - timezoneOffsetHours,</text>
-      }
-  ]
-
-  const chart = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: 'Prices',
-        data: prices
-      }]
-    },
-    options: {
-        events: ['click'],
-        scales: {
-            y: {
-            beginAtZero: true
-            }
-        }
-    }
-  });
-
-  function clickHandler(click)
+const prices = [
+  @foreach (ElectricityPrice price in Model.Prices)
   {
-    const points = chart.getElementsAtEventForMode(click, 'nearest', {intersect: true}, true);
-    const clickedPrice = prices[points[0].index];
-    document.getElementById('maxPriceEurocentPerMWh').setAttribute('value', clickedPrice);
+      <text>@(price.PriceEurocentPerMWh),</text>
   }
-  chart.canvas.onclick = clickHandler;
+]
+
+const timezoneOffsetHours = Math.floor((new Date()).getTimezoneOffset() / 60);
+const labels = [
+    @foreach (var price in Model.Prices)
+    {
+      <text>(@(price.Time.Hour) - timezoneOffsetHours),</text>
+    }
+]
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="/js/price-chart.js"></script>
+<script>
+highlightBarsWithPriceEqualOrBelow(@(Model.ChargingParameters.MaxPriceEurocentPerMWh))
+
+document.getElementById('maxPriceEurocentPerMWh').addEventListener("change", function() {
+  const currentMaxPrice = document.getElementById('maxPriceEurocentPerMWh').value;
+  highlightBarsWithPriceEqualOrBelow(currentMaxPrice);
+});
 </script>
