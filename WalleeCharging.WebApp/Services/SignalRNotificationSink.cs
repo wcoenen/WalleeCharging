@@ -2,6 +2,7 @@
 using WalleeCharging.ChargingStation;
 using WalleeCharging.Control;
 using WalleeCharging.Database;
+using WalleeCharging.Meter;
 using WalleeCharging.Price;
 
 namespace WalleeCharging.WebApp.Services;
@@ -19,9 +20,12 @@ public class SignalRNotificationSink : INotificationSink
         ChargingControlParameters chargingControlParameters,
         ElectricityPrice? price,
         ChargingStationData? chargingStationData,
+        MeterData? meterData,
         float currentLimitAmpere,
         string message)
     {
+        
+
         // see also WalleeCharging.WebApp/wwwroot/js/signalRSubscriber.js
         return _hubContext.Clients.All.SendAsync(
                     "ReceiveControlLoopNotification",

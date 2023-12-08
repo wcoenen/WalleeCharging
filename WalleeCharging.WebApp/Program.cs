@@ -9,6 +9,7 @@ using WalleeCharging.WebApp;
 using Microsoft.AspNetCore.SignalR;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddEnvironmentVariables();
 
 string sqliteFilePath = Path.Combine(
     builder.Environment.ContentRootPath,
@@ -41,7 +42,8 @@ builder.Services.AddSingleton(x =>
         x.GetRequiredService<IDatabase>(),
         x.GetRequiredService<IMeterDataProvider>(),
         x.GetRequiredService<IChargingStation>(),
-        x.GetRequiredService<INotificationSink>())
+        x.GetRequiredService<INotificationSink>(),
+        x.GetRequiredService<ILogger<ControlLoop>>())
 );
 builder.Services.AddHostedService<BackgroundWorkers>();
 

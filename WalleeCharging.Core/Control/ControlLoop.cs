@@ -3,6 +3,7 @@ using WalleeCharging.ChargingStation;
 using WalleeCharging.Database;
 using WalleeCharging.Meter;
 using WalleeCharging.Price;
+using Microsoft.Extensions.Logging;
 
 namespace WalleeCharging.Control;
 
@@ -13,6 +14,7 @@ public class ControlLoop
     private readonly IDatabase _database;
     private readonly IMeterDataProvider _meterDataProvider;
     private readonly IChargingStation _chargingStation;
+    private readonly ILogger<ControlLoop> _logger;
     private readonly INotificationSink _notificationSink;
 
     public ControlLoop(
@@ -21,7 +23,8 @@ public class ControlLoop
         IDatabase database,
         IMeterDataProvider meterDataProvider,
         IChargingStation chargingStation,
-        INotificationSink notificationSink)
+        INotificationSink notificationSink,
+        ILogger<ControlLoop> logger)
     {
         _loopDelayMillis = loopDelayMillis;
         _maxSafeCurrentAmpere = maxSafeCurrentAmpere;
@@ -29,6 +32,7 @@ public class ControlLoop
         _meterDataProvider = meterDataProvider;
         _chargingStation = chargingStation;
         _notificationSink = notificationSink;
+        _logger = logger;
     }
 
     public async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -37,7 +41,8 @@ public class ControlLoop
         {
             float next_current_limit_setpoint;
             ChargingStationData? chargingStationData = null;
-            string message;
+            MeterData? meterData = null;
+            string controlMessage;
             
             // Fetch data from database and check price constraint. This should be quick, so we do that first.
             var chargingParameters = await _database.GetChargingParametersAsync();
@@ -47,11 +52,11 @@ public class ControlLoop
                 next_current_limit_setpoint = 0;
                 if (currentPrice == null)
                 {
-                    message = $"Price is unknown.";
+                    controlMessage = $"Price is unknown.";
                 }
                 else
                 {
-                    message = $"Price is too high: {currentPrice.PriceEurocentPerMWh} > {chargingParameters.MaxPriceEurocentPerMWh}";
+                    controlMessage = $"Price is too high: {currentPrice.PriceEurocentPerMWh} > {chargingParameters.MaxPriceEurocentPerMWh}";
                 }
             }
             else
@@ -65,7 +70,7 @@ public class ControlLoop
                     var chargingStationDataTask = _chargingStation.GetChargingStationDataAsync();
 
                     // Make sure all tasks have completed.
-                    var meterData = await meterDataTask;
+                    meterData = await meterDataTask;
                     Trace.WriteLine($"Meter data: {meterData}");
                     chargingStationData = await chargingStationDataTask;
                     Trace.WriteLine($"Charging station data: {chargingStationData}");
@@ -76,12 +81,12 @@ public class ControlLoop
                     if (charging_current_constraint1 <= charging_current_constraint2)
                     {
                         next_current_limit_setpoint = charging_current_constraint1;
-                        message = $"Limiting meter current to {_maxSafeCurrentAmpere}A.";
+                        controlMessage = $"Limiting meter current to {_maxSafeCurrentAmpere}A.";
                     }
                     else
                     {
                         next_current_limit_setpoint = charging_current_constraint2;
-                        message = $"Limiting meter power to {chargingParameters.MaxTotalPowerWatts}W.";
+                        controlMessage = $"Limiting meter power to {chargingParameters.MaxTotalPowerWatts}W.";
                     }
 
                 }
@@ -90,9 +95,8 @@ public class ControlLoop
                     // Something went wrong in the communication with the meter or charging station.
                     // Disable charging for now.
                     next_current_limit_setpoint = 0;
-                    message = $"Error occurred: {e.Message}";
-                    Trace.WriteLine(e.Message);
-                    Trace.WriteLine(e.StackTrace);
+                    controlMessage = $"Error occurred: {e.Message}";
+                    _logger.LogError(e, "Failed to retrieve information in control loop.");
                 }
             }
 
@@ -118,24 +122,43 @@ public class ControlLoop
             {
                 Trace.WriteLine($"Sending current limit setpoint: {next_current_limit_setpoint:f2}");
                 await _chargingStation.SetCurrentLimitAsync(next_current_limit_setpoint);
+
+                // log everything
+                _logger.LogInformation(
+                    "charging parameters: {parameters}\n"
+                        + "current price: {price}\n"
+                        + "charging station data: {chargingStationData}\n"
+                        + "meterData: {meterData}\n"
+                        + "current limit setpoint: {currentLimit}\n"
+                        + "control message: {message}",
+                    chargingParameters,
+                    currentPrice,
+                    chargingStationData,
+                    meterData,
+                    next_current_limit_setpoint,
+                    controlMessage);
+                
+                // notify users
+
                 await _notificationSink.Notify(
                     chargingParameters,
                     currentPrice,
                     chargingStationData,
+                    meterData,
                     next_current_limit_setpoint,
-                    message);
+                    controlMessage);
             }
             catch (ChargingStationException e)
             {
                 // Something went wrong in the communication with the charging station.
                 // All we can do is try again in the next iteration.
-                Trace.WriteLine(e.Message);
-                Trace.WriteLine(e.StackTrace);
+                _logger.LogError(e, "Failed to send current limit to charging station.");
             }
             
             // wait until next iteration of the control loop
             await Task.Delay(_loopDelayMillis, stoppingToken);
         }
+        _logger.LogInformation("Exiting control loop.");
     }
 
     private float GetMaxCurrentCapacityTarif(ChargingControlParameters chargingParameters, MeterData meterData, ChargingStationData chargingStationData)
