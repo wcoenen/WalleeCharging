@@ -106,22 +106,17 @@ public class ControlLoop
                 }
             }
 
-            // Extra constraint: if the calculated limit is lower than 6 ampere, we cannot charge.
-            if (next_current_limit_setpoint < 6)
+            // Don't change the current limit if it is within 2% of the charging station's setpoint.
+            // The charging station seems to ignore such small changes.
+            if (chargingStationData != null)
             {
-                next_current_limit_setpoint = 0;
-            }
-
-            // If we're increasing the current from the previous non-zero limit, check if the increase is
-            // at least 5%. Don't bother changing anything for a smaller increase, we don't want to
-            // respond too eagerly to consumption noise. The charging station seems to ignore small changes anyway.
-            if ((chargingStationData != null) 
-                && (chargingStationData.CurrentLimitSetPoint > 0)
-                && (next_current_limit_setpoint > chargingStationData.CurrentLimitSetPoint)
-                && (next_current_limit_setpoint / chargingStationData.CurrentLimitSetPoint < 1.05))
-            {
-                Trace.WriteLine($"Increase too small, leaving current limit unchanged.");
-                next_current_limit_setpoint = chargingStationData.CurrentLimitSetPoint;
+                float currentChange = Math.Abs(next_current_limit_setpoint - chargingStationData.CurrentLimitSetPoint);
+                float currentChangeFraction = currentChange / chargingStationData.CurrentLimitSetPoint;
+                if (currentChangeFraction < 0.02)
+                {
+                    _logger.LogDebug($"New current limit within 2% of charging station's setpoint. Snap to previous limit.");
+                    next_current_limit_setpoint = chargingStationData.CurrentLimitSetPoint;
+                }
             }
 
             try
