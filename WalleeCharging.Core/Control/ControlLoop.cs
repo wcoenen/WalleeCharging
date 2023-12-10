@@ -16,18 +16,24 @@ public class ControlLoop
     private readonly IChargingStation _chargingStation;
     private readonly ILogger<ControlLoop> _logger;
     private readonly INotificationSink _notificationSink;
+    private readonly bool _shadowMode;
 
     public ControlLoop(
         int loopDelayMillis,
         int maxSafeCurrentAmpere,
+        bool shadowMode,
         IDatabase database,
         IMeterDataProvider meterDataProvider,
         IChargingStation chargingStation,
         INotificationSink notificationSink,
         ILogger<ControlLoop> logger)
     {
+        // settings
         _loopDelayMillis = loopDelayMillis;
         _maxSafeCurrentAmpere = maxSafeCurrentAmpere;
+        _shadowMode = shadowMode;
+
+        // services
         _database = database;
         _meterDataProvider = meterDataProvider;
         _chargingStation = chargingStation;
@@ -120,8 +126,14 @@ public class ControlLoop
 
             try
             {
-                Trace.WriteLine($"Sending current limit setpoint: {next_current_limit_setpoint:f2}");
-                await _chargingStation.SetCurrentLimitAsync(next_current_limit_setpoint);
+                if (!_shadowMode)
+                {
+                    await _chargingStation.SetCurrentLimitAsync(next_current_limit_setpoint);
+                }
+                else
+                {
+                    _logger.LogWarning("Running in shadow mode, NOT sending current limit of {current} ampere", next_current_limit_setpoint);
+                }
 
                 // log everything
                 _logger.LogInformation(

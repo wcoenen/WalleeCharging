@@ -6,25 +6,23 @@ using WalleeCharging.Price;
 using WalleeCharging.Control;
 using WalleeCharging.WebApp.Services;
 using WalleeCharging.WebApp;
-using Microsoft.AspNetCore.SignalR;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Configuration.AddEnvironmentVariables();
 
+// paths
 string sqliteFilePath = Path.Combine(
     builder.Environment.ContentRootPath,
     "WalleeCharging.sqlite");
 
 // Configuration values
-string alfenEveHostname = builder.Configuration.GetRequiredValue("AlfenEveHostName");
-string homeWizardUrl = builder.Configuration.GetRequiredValue("HomeWizardApiUrl");
-string entsoeApiToken = builder.Configuration.GetRequiredValue("EntsoeApiKey");
-int maxSafeCurrentAmpere = Int32.Parse(
-    builder.Configuration.GetRequiredValue("MaxSafeCurrentAmpere"),
-    CultureInfo.InvariantCulture);
-int loopDelayMillis = Int32.Parse(
-    builder.Configuration.GetRequiredValue("LoopDelayMillis"),
-    CultureInfo.InvariantCulture);
+var config = builder.Configuration;
+config.AddEnvironmentVariables();
+string alfenEveHostname =   config.GetRequiredValue("AlfenEveHostName");
+string homeWizardUrl =      config.GetRequiredValue("HomeWizardApiUrl");
+string entsoeApiToken =     config.GetRequiredValue("EntsoeApiKey");
+int maxSafeCurrentAmpere =  config.GetRequiredValue<int>("MaxSafeCurrentAmpere");
+int loopDelayMillis =       config.GetRequiredValue<int>("LoopDelayMillis");
+bool shadowMode =           config.GetRequiredValue<bool>("ShadowMode");
 
 // Add services to the container.
 builder.Services.AddRazorPages();
@@ -37,8 +35,9 @@ builder.Services.AddSingleton<PriceFetchingLoop>();
 builder.Services.AddSingleton<INotificationSink,SignalRNotificationSink>();
 builder.Services.AddSingleton(x => 
     new ControlLoop(
-        loopDelayMillis,
-        maxSafeCurrentAmpere,
+        loopDelayMillis: loopDelayMillis,
+        maxSafeCurrentAmpere: maxSafeCurrentAmpere,
+        shadowMode: shadowMode,
         x.GetRequiredService<IDatabase>(),
         x.GetRequiredService<IMeterDataProvider>(),
         x.GetRequiredService<IChargingStation>(),
