@@ -46,6 +46,7 @@ public class ControlLoop
         while (!stoppingToken.IsCancellationRequested)
         {
             float next_current_limit_setpoint;
+            int? previousPrice = null;
             ChargingStationData? chargingStationData = null;
             MeterData? meterData = null;
             string controlMessage;
@@ -77,9 +78,7 @@ public class ControlLoop
 
                     // Make sure all tasks have completed.
                     meterData = await meterDataTask;
-                    Trace.WriteLine($"Meter data: {meterData}");
                     chargingStationData = await chargingStationDataTask;
-                    Trace.WriteLine($"Charging station data: {chargingStationData}");
 
                     // Calculate both constraints and apply the smaller result.
                     float charging_current_constraint1 = GetMaxCurrentWire(chargingParameters, meterData, chargingStationData);
@@ -127,33 +126,18 @@ public class ControlLoop
                 }
                 else
                 {
-                    _logger.LogWarning("Running in shadow mode, NOT sending current limit of {current} ampere", next_current_limit_setpoint);
+                    _logger.LogWarning("Running in SHADOW MODE, not sending current limit of {current} ampere", next_current_limit_setpoint);
                 }
 
-                // log everything
-                _logger.LogInformation(
-                    "charging parameters: {parameters}\n"
-                        + "current price: {price}\n"
-                        + "charging station data: {chargingStationData}\n"
-                        + "meterData: {meterData}\n"
-                        + "current limit setpoint: {currentLimit}\n"
-                        + "control message: {message}",
-                    chargingParameters,
-                    currentPrice,
+                // log this control loop iteration
+                await LogAndNotify(
+                    next_current_limit_setpoint, 
                     chargingStationData,
                     meterData,
-                    next_current_limit_setpoint,
-                    controlMessage);
-                
-                // notify users
-
-                await _notificationSink.Notify(
+                    controlMessage,
                     chargingParameters,
-                    currentPrice,
-                    chargingStationData,
-                    meterData,
-                    next_current_limit_setpoint,
-                    controlMessage);
+                    previousPrice,
+                    currentPrice?.PriceEurocentPerMWh);
             }
             catch (ChargingStationException e)
             {
@@ -161,11 +145,59 @@ public class ControlLoop
                 // All we can do is try again in the next iteration.
                 _logger.LogError(e, "Failed to send current limit to charging station.");
             }
+
+            previousPrice = currentPrice?.PriceEurocentPerMWh;
             
             // wait until next iteration of the control loop
             await Task.Delay(_loopDelayMillis, stoppingToken);
         }
         _logger.LogInformation("Exiting control loop.");
+    }
+
+    private async Task LogAndNotify(
+        float next_current_limit_setpoint,  
+        ChargingStationData? chargingStationData,
+        MeterData? meterData,
+        string controlMessage,
+        ChargingControlParameters chargingParameters,
+        int? previousPrice,
+        int? currentPrice)
+    {
+        LogLevel controlLoopIterationLogLevel;
+        if (next_current_limit_setpoint != chargingStationData?.CurrentLimitSetPoint
+            || currentPrice != previousPrice)
+        {
+            controlLoopIterationLogLevel = LogLevel.Information;
+        }
+        else
+        {
+            controlLoopIterationLogLevel = LogLevel.Debug;
+        }
+
+        _logger.Log(
+            controlLoopIterationLogLevel,
+            "Control loop update.\n"
+                + "- charging parameters: {parameters}\n"
+                + "- current price: {price}\n"
+                + "- charging station data: {chargingStationData}\n"
+                + "- meterData: {meterData}\n"
+                + "- next current limit setpoint: {currentLimit}\n"
+                + "- control message: {message}",
+            chargingParameters,
+            currentPrice,
+            chargingStationData,
+            meterData,
+            next_current_limit_setpoint,
+            controlMessage);
+
+        // notify users
+        await _notificationSink.Notify(
+            chargingParameters,
+            currentPrice,
+            chargingStationData,
+            meterData,
+            next_current_limit_setpoint,
+            controlMessage);
     }
 
     private float GetMaxCurrentCapacityTarif(ChargingControlParameters chargingParameters, MeterData meterData, ChargingStationData chargingStationData)
@@ -175,9 +207,7 @@ public class ControlLoop
         float power_available_for_charging = chargingParameters.MaxTotalPowerWatts - non_charger_power;
         float voltage_sum = meterData.Voltage1 + meterData.Voltage2 + meterData.Voltage3;
         float charging_current_constraint2 = power_available_for_charging / voltage_sum;
-        Trace.WriteLine($"[GetMaxCurrentCapacityTarif] Total power use: {meterData.TotalActivePower} watts");
-        Trace.WriteLine($"[GetMaxCurrentCapacityTarif] use other than charger: {non_charger_power} watts");
-        Trace.WriteLine($"[GetMaxCurrentCapacityTarif] Max charging current based on power limit: {charging_current_constraint2:f2} ampere");
+        _logger.LogDebug($"GetMaxCurrentCapacityTarif result: {charging_current_constraint2:f2} ampere");
         return charging_current_constraint2;
     }
 
@@ -200,26 +230,16 @@ public class ControlLoop
         float charging_current_constraint1 = Math.Min(
             Math.Min(wire_capacity_available_1, wire_capacity_available_2),
             wire_capacity_available_3);
-        Trace.WriteLine($"[GetMaxCurrentWire] wire capacity available for charging = {charging_current_constraint1:f2} ampere");
+        _logger.LogDebug($"GetMaxCurrentWire result: {charging_current_constraint1:f2} ampere");
         return charging_current_constraint1;
     }
 
     private bool IsPriceAcceptable(ChargingControlParameters chargingParameters, ElectricityPrice? currentPrice)
     {
-        Trace.WriteLine($"[IsPriceAcceptable] Max price     = {chargingParameters.MaxPriceEurocentPerMWh} eurocent/MWh");
-        Trace.WriteLine($"[IsPriceAcceptable] Current price = {currentPrice?.PriceEurocentPerMWh} eurocent/MWh");
-
-        if (currentPrice == null || currentPrice.PriceEurocentPerMWh > chargingParameters.MaxPriceEurocentPerMWh)
-        {
-            Trace.WriteLine($"[IsPriceAcceptable] do not charge");
-            return false;
-        }
-        else
-        {
-            Trace.WriteLine($"[IsPriceAcceptable] price is ok");
-            return true;
-        }
-
+        bool result = currentPrice != null 
+            && currentPrice.PriceEurocentPerMWh <= chargingParameters.MaxPriceEurocentPerMWh;
+        _logger.LogDebug("IsPriceAcceptable result: {result}", result);
+        return result;
     }
 
 

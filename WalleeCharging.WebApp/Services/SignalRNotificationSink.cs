@@ -15,10 +15,11 @@ public class SignalRNotificationSink : INotificationSink
     {
         _hubContext = hubContext;
     }
+    
 
     public Task Notify(
         ChargingControlParameters chargingControlParameters,
-        ElectricityPrice? price,
+        int? price,
         ChargingStationData? chargingStationData,
         MeterData? meterData,
         float currentLimitAmpere,
