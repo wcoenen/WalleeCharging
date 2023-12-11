@@ -43,10 +43,12 @@ public class ControlLoop
 
     public async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        int? previousPrice = null;
+        float previousCurrentLimit = 0;
+
         while (!stoppingToken.IsCancellationRequested)
         {
             float next_current_limit_setpoint;
-            int? previousPrice = null;
             ChargingStationData? chargingStationData = null;
             MeterData? meterData = null;
             string controlMessage;
@@ -131,6 +133,7 @@ public class ControlLoop
 
                 // log this control loop iteration
                 await LogAndNotify(
+                    previousCurrentLimit,
                     next_current_limit_setpoint, 
                     chargingStationData,
                     meterData,
@@ -146,7 +149,9 @@ public class ControlLoop
                 _logger.LogError(e, "Failed to send current limit to charging station.");
             }
 
+            // Remember price and current limit setpoint for next iteration.
             previousPrice = currentPrice?.PriceEurocentPerMWh;
+            previousCurrentLimit = next_current_limit_setpoint;
             
             // wait until next iteration of the control loop
             await Task.Delay(_loopDelayMillis, stoppingToken);
@@ -155,6 +160,7 @@ public class ControlLoop
     }
 
     private async Task LogAndNotify(
+        float previousCurrentLimit,
         float next_current_limit_setpoint,  
         ChargingStationData? chargingStationData,
         MeterData? meterData,
@@ -164,7 +170,7 @@ public class ControlLoop
         int? currentPrice)
     {
         LogLevel controlLoopIterationLogLevel;
-        if (next_current_limit_setpoint != chargingStationData?.CurrentLimitSetPoint
+        if (next_current_limit_setpoint != previousCurrentLimit
             || currentPrice != previousPrice)
         {
             controlLoopIterationLogLevel = LogLevel.Information;
