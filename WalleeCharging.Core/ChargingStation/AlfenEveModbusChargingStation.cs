@@ -1,5 +1,7 @@
 ﻿
+using System.Diagnostics;
 using System.Net.Sockets;
+using Microsoft.Extensions.Logging;
 using NModbus;
 using NModbus.Utility;
 
@@ -29,13 +31,19 @@ public class AlfenEveModbusChargingStation : IChargingStation, IDisposable
     private readonly ushort REGISTER_MAX_CURRENT_SETPOINT = 1210;
 
     private readonly string _hostname;
+    private readonly ILogger<AlfenEveModbusChargingStation> _logger;
+    private readonly Stopwatch _stopWatch;
     private readonly ModbusFactory _modbusFactory;
     private TcpClient _tcpClient;
     private IModbusMaster _modbusMaster;
 
-    public AlfenEveModbusChargingStation(string hostname)
+    public AlfenEveModbusChargingStation(string hostname, ILogger<AlfenEveModbusChargingStation> logger)
     {
         _hostname = hostname;
+        
+        _logger = logger;
+        _stopWatch = new Stopwatch();
+
         _modbusFactory = new ModbusFactory();
         _tcpClient = new TcpClient(_hostname, PORT);
         _modbusMaster = _modbusFactory.CreateMaster(_tcpClient);
@@ -53,21 +61,22 @@ public class AlfenEveModbusChargingStation : IChargingStation, IDisposable
         {
             ConnectIfNeeded();
 
+
             var data = new ChargingStationData();
-            {
-                ushort[] registerValues = await _modbusMaster.ReadHoldingRegistersAsync(CHARGING_SOCKET_ID, REGISTER_REAL_POWER_SUM, 2);
-                data.RealPowerSum = ModbusUtility.GetSingle(registerValues[0], registerValues[1]);
-            }
-            {
-                ushort[] registerValues = await _modbusMaster.ReadHoldingRegistersAsync(CHARGING_SOCKET_ID, REGISTER_CURRENT_PHASE_1, 6);
-                data.Current1 = ModbusUtility.GetSingle(registerValues[0], registerValues[1]);
-                data.Current2 = ModbusUtility.GetSingle(registerValues[2], registerValues[3]);
-                data.Current3 = ModbusUtility.GetSingle(registerValues[4], registerValues[5]);
-            }
-            {
-                ushort[] registerValues = await _modbusMaster.ReadHoldingRegistersAsync(CHARGING_SOCKET_ID, REGISTER_MAX_CURRENT_SETPOINT, 6);
-                data.CurrentLimitSetPoint = ModbusUtility.GetSingle(registerValues[0], registerValues[1]);
-            }
+
+            _stopWatch.Reset();
+            _stopWatch.Start();
+            ushort count = (ushort)(REGISTER_REAL_POWER_SUM - REGISTER_CURRENT_PHASE_1 + 2);
+            ushort[] registerValues = await _modbusMaster.ReadHoldingRegistersAsync(CHARGING_SOCKET_ID, REGISTER_CURRENT_PHASE_1, count);
+            _stopWatch.Stop();
+            _logger.LogDebug("Getting currents and RealPowerSum over modbus took {millis} milliseconds", _stopWatch.ElapsedMilliseconds);
+
+            data.Current1 = ModbusUtility.GetSingle(registerValues[0], registerValues[1]);
+            data.Current2 = ModbusUtility.GetSingle(registerValues[2], registerValues[3]);
+            data.Current3 = ModbusUtility.GetSingle(registerValues[4], registerValues[5]);
+
+            int offset = REGISTER_REAL_POWER_SUM - REGISTER_CURRENT_PHASE_1;
+            data.RealPowerSum = ModbusUtility.GetSingle(registerValues[offset], registerValues[offset+1]);
             
             return data;
         }

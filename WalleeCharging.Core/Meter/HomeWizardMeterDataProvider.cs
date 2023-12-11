@@ -1,5 +1,6 @@
-﻿using System.Configuration;
+﻿using System.Diagnostics;
 using Microsoft.CSharp.RuntimeBinder;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
 namespace WalleeCharging.Meter;
@@ -7,16 +8,23 @@ namespace WalleeCharging.Meter;
 public class HomeWizardMeterDataProvider : IMeterDataProvider, IDisposable
 {
     private readonly string _url;
+    private readonly ILogger<HomeWizardMeterDataProvider> _logger;
     private readonly HttpClient _httpClient;
+    private readonly Stopwatch _stopwatch;
 
-    public HomeWizardMeterDataProvider(string url)
+
+    public HomeWizardMeterDataProvider(string url, ILogger<HomeWizardMeterDataProvider> logger)
     {
         _url = url;
+        _logger = logger;
         _httpClient = new HttpClient();
+        _stopwatch = new Stopwatch();
     }
 
     public async Task<MeterData> GetMeterDataAsync()
     {
+        _stopwatch.Reset();
+        _stopwatch.Start();
         HttpResponseMessage response;
         try
         {
@@ -33,6 +41,9 @@ public class HomeWizardMeterDataProvider : IMeterDataProvider, IDisposable
         string responseBody = await response.Content.ReadAsStringAsync();
         try
         {
+            _stopwatch.Stop();
+            _logger.LogDebug("Homewizard API GET request took {millis} milliseconds", _stopwatch.ElapsedMilliseconds);
+
             dynamic? data = JsonConvert.DeserializeObject(responseBody);
             
             if (data == null)

@@ -34,11 +34,18 @@ bool shadowMode =           config.GetRequiredValue<bool>("ShadowMode");
 builder.Services.AddRazorPages();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IDatabase>(new SqliteDatabase(sqliteFilePath));
-builder.Services.AddSingleton<IMeterDataProvider>(new HomeWizardMeterDataProvider(homeWizardUrl));
-builder.Services.AddSingleton<IChargingStation>(new AlfenEveModbusChargingStation(alfenEveHostname));
 builder.Services.AddSingleton<IPriceFetcher>(new EntsoePriceFetcher(entsoeApiToken));
 builder.Services.AddSingleton<PriceFetchingLoop>();
 builder.Services.AddSingleton<INotificationSink,SignalRNotificationSink>();
+builder.Services.AddSingleton<IMeterDataProvider>(x =>
+    new HomeWizardMeterDataProvider(
+        homeWizardUrl,
+        x.GetRequiredService<ILogger<HomeWizardMeterDataProvider>>()));
+builder.Services.AddSingleton<IChargingStation>(x =>
+    new AlfenEveModbusChargingStation(
+        alfenEveHostname,
+        x.GetRequiredService<ILogger<AlfenEveModbusChargingStation>>())
+);
 builder.Services.AddSingleton(x => 
     new ControlLoop(
         loopDelayMillis: loopDelayMillis,

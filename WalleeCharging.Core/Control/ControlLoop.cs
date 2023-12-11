@@ -107,19 +107,6 @@ public class ControlLoop
                 }
             }
 
-            // Don't change the current limit if it is within 2% of the charging station's setpoint.
-            // The charging station seems to ignore such small changes.
-            if (chargingStationData != null)
-            {
-                float currentChange = Math.Abs(next_current_limit_setpoint - chargingStationData.CurrentLimitSetPoint);
-                float currentChangeFraction = currentChange / chargingStationData.CurrentLimitSetPoint;
-                if (currentChangeFraction < 0.02)
-                {
-                    _logger.LogDebug($"New current limit within 2% of charging station's setpoint. Snap to previous limit.");
-                    next_current_limit_setpoint = chargingStationData.CurrentLimitSetPoint;
-                }
-            }
-
             try
             {
                 if (!_shadowMode)
@@ -210,6 +197,13 @@ public class ControlLoop
     {
         // current constraint 2: account for other consumers and do not exceed MaxTotalPowerWatts
         float non_charger_power = meterData.TotalActivePower - chargingStationData.RealPowerSum;
+        if (non_charger_power < 0)
+        {
+            // This can only mean the meter data is out of date and not yet accounting for the charging power.
+            // Log a warning and assume meterData.TotalActivePower is all from other consumers.
+            _logger.LogWarning("Meter data is not yet showing charging, GetMaxCurrentCapacityTarif result may be unreliable!");
+            non_charger_power = meterData.TotalActivePower;
+        }
         float power_available_for_charging = chargingParameters.MaxTotalPowerWatts - non_charger_power;
         float voltage_sum = meterData.Voltage1 + meterData.Voltage2 + meterData.Voltage3;
         float charging_current_constraint2 = power_available_for_charging / voltage_sum;
