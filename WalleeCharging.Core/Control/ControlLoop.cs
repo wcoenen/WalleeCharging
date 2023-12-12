@@ -156,9 +156,13 @@ public class ControlLoop
         int? previousPrice,
         int? currentPrice)
     {
+        // Determine log level.
+        // Only log at the Information level if the price has changed,
+        // or the charging current limit is changing by at least 10%.
+        // Otherwise, log at the debug level.
         LogLevel controlLoopIterationLogLevel;
-        if (next_current_limit_setpoint != previousCurrentLimit
-            || currentPrice != previousPrice)
+        float relativeChange = Math.Abs(next_current_limit_setpoint - previousCurrentLimit) / previousCurrentLimit;
+        if (relativeChange > 0.1 || currentPrice != previousPrice)
         {
             controlLoopIterationLogLevel = LogLevel.Information;
         }
