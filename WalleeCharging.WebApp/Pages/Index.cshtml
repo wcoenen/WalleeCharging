@@ -46,6 +46,10 @@ const labels = [
       <text>((@(price.Time.Hour) - timezoneOffsetHours) % 24),</text>
     }
 ]
+if (labels.length > 0)
+{
+    labels[0] = 'now';
+}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="/js/price-chart.js"></script>
