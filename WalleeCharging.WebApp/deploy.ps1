@@ -13,4 +13,10 @@ dotnet publish
 # dotnet publish seems to include development-only files, so let's delete those
 Remove-Item (Join-Path $publishFolder appsettings*.json)
 
+# Stop WalleeCharging on deployment target, copy files, and restart
+Write-Host 'Stopping WalleeCharging'
+ssh wim@wallee sudo systemctl stop WalleeCharging
+Write-Host 'Copying files'
 scp -r "$publishFolder\*" wim@wallee.local:/home/wim/WalleeCharging
+Write-Host 'Starting WalleeCharging'
+ssh wim@wallee sudo systemctl start WalleeCharging
