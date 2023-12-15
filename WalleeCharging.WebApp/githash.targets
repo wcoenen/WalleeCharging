@@ -1,0 +1,34 @@
+<Project>
+
+    <!-- based on https://stackoverflow.com/questions/15141338/embed-git-commit-hash-in-a-net-dll -->
+
+    <Target Name="SetGitHash" BeforeTargets="WriteGitHash">
+        <Exec 
+            Command="git describe --long --always --dirty --exclude=* --abbrev=8"
+            ConsoleToMSBuild="True"
+            IgnoreExitCode="False">
+                <Output PropertyName="GitHash" TaskParameter="ConsoleOutput"/>
+        </Exec>
+    </Target>
+
+    <Target Name="WriteGitHash" BeforeTargets="CoreCompile">
+        <!-- names the obj/.../CustomAssemblyInfo.cs file -->
+        <PropertyGroup>
+            <CustomAssemblyInfoFile>$(IntermediateOutputPath)CustomAssemblyInfo.cs</CustomAssemblyInfoFile>
+        </PropertyGroup>
+        <!-- includes the CustomAssemblyInfo.cs file-->
+        <ItemGroup>
+            <Compile Include="$(CustomAssemblyInfoFile)" />
+        </ItemGroup>
+        <!-- defines the AssemblyMetadata attribute that will be written -->
+        <ItemGroup>
+        <AssemblyAttributes Include="AssemblyMetadata">
+            <_Parameter1>GitHash</_Parameter1>
+            <_Parameter2>$(GitHash)</_Parameter2>
+        </AssemblyAttributes>
+        </ItemGroup>
+        <!-- writes the attribute to the customAssemblyInfo file -->
+        <WriteCodeFragment Language="C#" OutputFile="$(CustomAssemblyInfoFile)" AssemblyAttributes="@(AssemblyAttributes)" />
+    </Target>
+
+</Project>
