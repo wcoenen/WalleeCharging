@@ -43,12 +43,16 @@ public class ControlLoop
 
     public async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        int? previousPrice = null;
-        float previousCurrentLimit = 0;
+        _logger.LogInformation(
+            "Starting control loop with delay between iterations of {delay} milliseconds. "
+            + "Logging will only happen at the INFO level when the charging current limit changes significantly.",
+             _loopDelayMillis);
+
+        float previousChargingCurrentLimit = 0;
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            float next_current_limit_setpoint;
+            float chargingCurrentLimit;
             ChargingStationData? chargingStationData = null;
             MeterData? meterData = null;
             string controlMessage;
@@ -58,7 +62,7 @@ public class ControlLoop
             var currentPrice = await _database.GetPriceAsync(DateTime.UtcNow);
             if (!IsPriceAcceptable(chargingParameters, currentPrice))
             {
-                next_current_limit_setpoint = 0;
+                chargingCurrentLimit = 0;
                 if (currentPrice == null)
                 {
                     controlMessage = $"Price is unknown.";
@@ -87,12 +91,12 @@ public class ControlLoop
                     float charging_current_constraint2 = GetMaxCurrentCapacityTarif(chargingParameters, meterData, chargingStationData);
                     if (charging_current_constraint1 <= charging_current_constraint2)
                     {
-                        next_current_limit_setpoint = charging_current_constraint1;
+                        chargingCurrentLimit = charging_current_constraint1;
                         controlMessage = $"Limiting meter current to {_maxSafeCurrentAmpere}A.";
                     }
                     else
                     {
-                        next_current_limit_setpoint = charging_current_constraint2;
+                        chargingCurrentLimit = charging_current_constraint2;
                         controlMessage = $"Limiting meter power to {chargingParameters.MaxTotalPowerWatts}W.";
                     }
 
@@ -101,7 +105,7 @@ public class ControlLoop
                 {
                     // Something went wrong in the communication with the meter or charging station.
                     // Disable charging for now.
-                    next_current_limit_setpoint = 0;
+                    chargingCurrentLimit = 0;
                     controlMessage = $"Error occurred: {e.Message}";
                     _logger.LogError(e, "Failed to retrieve information in control loop.");
                 }
@@ -111,22 +115,21 @@ public class ControlLoop
             {
                 if (!_shadowMode)
                 {
-                    await _chargingStation.SetCurrentLimitAsync(next_current_limit_setpoint);
+                    await _chargingStation.SetCurrentLimitAsync(chargingCurrentLimit);
                 }
                 else
                 {
-                    _logger.LogWarning("Running in SHADOW MODE, not sending current limit of {current} ampere", next_current_limit_setpoint);
+                    _logger.LogWarning("Running in SHADOW MODE, not sending current limit of {current} ampere", chargingCurrentLimit);
                 }
 
                 // log this control loop iteration
                 await LogAndNotify(
-                    previousCurrentLimit,
-                    next_current_limit_setpoint, 
+                    previousChargingCurrentLimit,
+                    chargingCurrentLimit, 
                     chargingStationData,
                     meterData,
                     controlMessage,
                     chargingParameters,
-                    previousPrice,
                     currentPrice?.PriceEurocentPerMWh);
             }
             catch (ChargingStationException e)
@@ -136,9 +139,8 @@ public class ControlLoop
                 _logger.LogError(e, "Failed to send current limit to charging station.");
             }
 
-            // Remember price and current limit setpoint for next iteration.
-            previousPrice = currentPrice?.PriceEurocentPerMWh;
-            previousCurrentLimit = next_current_limit_setpoint;
+            // Remember charging current limit setpoint for next iteration.
+            previousChargingCurrentLimit = chargingCurrentLimit;
             
             // wait until next iteration of the control loop
             await Task.Delay(_loopDelayMillis, stoppingToken);
@@ -147,22 +149,20 @@ public class ControlLoop
     }
 
     private async Task LogAndNotify(
-        float previousCurrentLimit,
-        float next_current_limit_setpoint,  
+        float previousChargingCurrentLimit,
+        float chargingCurrentLimit,  
         ChargingStationData? chargingStationData,
         MeterData? meterData,
         string controlMessage,
         ChargingControlParameters chargingParameters,
-        int? previousPrice,
         int? currentPrice)
     {
         // Determine log level.
-        // Only log at the Information level if the price has changed,
-        // or the charging current limit is changing by at least 10%.
+        // Only log at the Information level if the charging current limit is changing by at least 10%.
         // Otherwise, log at the debug level.
         LogLevel controlLoopIterationLogLevel;
-        float relativeChange = Math.Abs(next_current_limit_setpoint - previousCurrentLimit) / previousCurrentLimit;
-        if (relativeChange > 0.1 || currentPrice != previousPrice)
+        float relativeChange = Math.Abs(chargingCurrentLimit - previousChargingCurrentLimit) / previousChargingCurrentLimit;
+        if (relativeChange > 0.1)
         {
             controlLoopIterationLogLevel = LogLevel.Information;
         }
@@ -184,7 +184,7 @@ public class ControlLoop
             currentPrice,
             chargingStationData,
             meterData,
-            next_current_limit_setpoint,
+            chargingCurrentLimit,
             controlMessage);
 
         // notify users
@@ -193,7 +193,7 @@ public class ControlLoop
             currentPrice,
             chargingStationData,
             meterData,
-            next_current_limit_setpoint,
+            chargingCurrentLimit,
             controlMessage);
     }
 
