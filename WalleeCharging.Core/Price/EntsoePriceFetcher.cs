@@ -18,42 +18,20 @@ public class EntsoePriceFetcher : IPriceFetcher
     
     private readonly string _apiKey;
     private readonly HttpClient _httpClient;
-    private readonly int MINIMUM_TIME_BETWEEN_REQUESTS_MILLIS = 1000;
-
-    private DateTime? _lastInvocation;
-    private object _lastInvocationLock;
 
     public EntsoePriceFetcher(string apiKey)
     {
         _apiKey = apiKey;
         _httpClient = new HttpClient();
-        _lastInvocation = null;
-        _lastInvocationLock = new object();
     }
 
-    /// <summary>
-    /// Throws an exception if rate limit violated.
-    /// </summary>
-    private void TrackRateLimit()
-    {
-        lock (_lastInvocationLock)
-        {
-            var now = DateTime.UtcNow;
-            if ((_lastInvocation.HasValue) && (now < _lastInvocation.Value.AddMilliseconds(MINIMUM_TIME_BETWEEN_REQUESTS_MILLIS)))
-            {
-                throw new PriceFetcherException($"The rate limit was exceeded for {nameof(EntsoePriceFetcher)}.");
-            }
-            else
-            {
-                _lastInvocation = now;
-            }
-        }
-    }
-    
     public async Task<ElectricityPrice[]> GetPricesAsync(DateTime day, CancellationToken cancellationToken)
     {
         if (day.Kind != DateTimeKind.Utc)
             throw new ArgumentException("DateTimeKind must be UTC");
+
+        // rate limit
+        await Task.Delay(1000, cancellationToken);
 
         // The entsoe API accepts a TimeInterval query parameter formatted as the start and end of the
         // time interval in ISO 8601 format, with a slash between them.
@@ -70,7 +48,6 @@ public class EntsoePriceFetcher : IPriceFetcher
             HttpUtility.UrlEncode(DOMAIN),
             HttpUtility.UrlEncode(timeInterval));
 
-        TrackRateLimit();
         var response = await _httpClient.GetAsync(url, cancellationToken);
         string responseText = await response.Content.ReadAsStringAsync();
         response.EnsureSuccessStatusCode();
