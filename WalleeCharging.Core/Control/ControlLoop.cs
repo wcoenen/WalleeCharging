@@ -47,103 +47,111 @@ public class ControlLoop
             "Starting control loop with delay between iterations of {delay} milliseconds. "
             + "Logging will only happen at the INFO level when the charging current limit changes significantly.",
              _loopDelayMillis);
-
-        float previousChargingCurrentLimit = 0;
-
-        while (!stoppingToken.IsCancellationRequested)
+        
+        try
         {
-            float chargingCurrentLimit;
-            ChargingStationData? chargingStationData = null;
-            MeterData? meterData = null;
-            string controlMessage;
-            
-            // Fetch data from database and check price constraint. This should be quick, so we do that first.
-            var chargingParameters = await _database.GetChargingParametersAsync();
-            var currentPrice = await _database.GetPriceAsync(DateTime.UtcNow);
-            if (!IsPriceAcceptable(chargingParameters, currentPrice))
-            {
-                chargingCurrentLimit = 0;
-                if (currentPrice == null)
-                {
-                    controlMessage = $"Price is unknown.";
-                }
-                else
-                {
-                    controlMessage = $"Price is too high: {currentPrice.PriceEurocentPerMWh} > {chargingParameters.MaxPriceEurocentPerMWh}";
-                }
-            }
-            else
-            {
-                try
-                {
-                    // Price is acceptable.
-                    // The next checks require data from the meter and charging station.
-                    // Don't "await" yet; fetch data in parallel.
-                    var meterDataTask = _meterDataProvider.GetMeterDataAsync();
-                    var chargingStationDataTask = _chargingStation.GetChargingStationDataAsync();
+            float previousChargingCurrentLimit = 0;
 
-                    // Make sure all tasks have completed.
-                    meterData = await meterDataTask;
-                    chargingStationData = await chargingStationDataTask;
-
-                    // Calculate both constraints and apply the smaller result.
-                    float charging_current_constraint1 = GetMaxCurrentWire(chargingParameters, meterData, chargingStationData);
-                    float charging_current_constraint2 = GetMaxCurrentCapacityTarif(chargingParameters, meterData, chargingStationData);
-                    if (charging_current_constraint1 <= charging_current_constraint2)
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                float chargingCurrentLimit;
+                ChargingStationData? chargingStationData = null;
+                MeterData? meterData = null;
+                string controlMessage;
+                
+                // Fetch data from database and check price constraint. This should be quick, so we do that first.
+                var chargingParameters = await _database.GetChargingParametersAsync();
+                var currentPrice = await _database.GetPriceAsync(DateTime.UtcNow);
+                if (!IsPriceAcceptable(chargingParameters, currentPrice))
+                {
+                    chargingCurrentLimit = 0;
+                    if (currentPrice == null)
                     {
-                        chargingCurrentLimit = charging_current_constraint1;
-                        controlMessage = $"Limiting meter current to {_maxSafeCurrentAmpere}A.";
+                        controlMessage = $"Price is unknown.";
                     }
                     else
                     {
-                        chargingCurrentLimit = charging_current_constraint2;
-                        controlMessage = $"Limiting meter power to {chargingParameters.MaxTotalPowerWatts}W.";
+                        controlMessage = $"Price is too high: {currentPrice.PriceEurocentPerMWh} > {chargingParameters.MaxPriceEurocentPerMWh}";
                     }
-
-                }
-                catch (Exception e) when (e is ChargingStationException || e is MeterDataException)
-                {
-                    // Something went wrong in the communication with the meter or charging station.
-                    // Disable charging for now.
-                    chargingCurrentLimit = 0;
-                    controlMessage = $"Error occurred: {e.Message}";
-                    _logger.LogError(e, "Failed to retrieve information in control loop.");
-                }
-            }
-
-            try
-            {
-                if (!_shadowMode)
-                {
-                    await _chargingStation.SetCurrentLimitAsync(chargingCurrentLimit);
                 }
                 else
                 {
-                    _logger.LogWarning("Running in SHADOW MODE, not sending current limit of {current} ampere", chargingCurrentLimit);
+                    try
+                    {
+                        // Price is acceptable.
+                        // The next checks require data from the meter and charging station.
+                        // Don't "await" yet; fetch data in parallel.
+                        var meterDataTask = _meterDataProvider.GetMeterDataAsync();
+                        var chargingStationDataTask = _chargingStation.GetChargingStationDataAsync();
+
+                        // Make sure all tasks have completed.
+                        meterData = await meterDataTask;
+                        chargingStationData = await chargingStationDataTask;
+
+                        // Calculate both constraints and apply the smaller result.
+                        float charging_current_constraint1 = GetMaxCurrentWire(chargingParameters, meterData, chargingStationData);
+                        float charging_current_constraint2 = GetMaxCurrentCapacityTarif(chargingParameters, meterData, chargingStationData);
+                        if (charging_current_constraint1 <= charging_current_constraint2)
+                        {
+                            chargingCurrentLimit = charging_current_constraint1;
+                            controlMessage = $"Limiting meter current to {_maxSafeCurrentAmpere}A.";
+                        }
+                        else
+                        {
+                            chargingCurrentLimit = charging_current_constraint2;
+                            controlMessage = $"Limiting meter power to {chargingParameters.MaxTotalPowerWatts}W.";
+                        }
+
+                    }
+                    catch (Exception e) when (e is ChargingStationException || e is MeterDataException)
+                    {
+                        // Something went wrong in the communication with the meter or charging station.
+                        // Disable charging for now.
+                        chargingCurrentLimit = 0;
+                        controlMessage = $"Error occurred: {e.Message}";
+                        _logger.LogError(e, "Failed to retrieve information in control loop.");
+                    }
                 }
 
-                // log this control loop iteration
-                await LogAndNotify(
-                    previousChargingCurrentLimit,
-                    chargingCurrentLimit, 
-                    chargingStationData,
-                    meterData,
-                    controlMessage,
-                    chargingParameters,
-                    currentPrice?.PriceEurocentPerMWh);
-            }
-            catch (ChargingStationException e)
-            {
-                // Something went wrong in the communication with the charging station.
-                // All we can do is try again in the next iteration.
-                _logger.LogError(e, "Failed to send current limit to charging station.");
-            }
+                try
+                {
+                    if (!_shadowMode)
+                    {
+                        await _chargingStation.SetCurrentLimitAsync(chargingCurrentLimit);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Running in SHADOW MODE, not sending current limit of {current} ampere", chargingCurrentLimit);
+                    }
 
-            // Remember charging current limit setpoint for next iteration.
-            previousChargingCurrentLimit = chargingCurrentLimit;
-            
-            // wait until next iteration of the control loop
-            await Task.Delay(_loopDelayMillis, stoppingToken);
+                    // log this control loop iteration
+                    await LogAndNotify(
+                        previousChargingCurrentLimit,
+                        chargingCurrentLimit, 
+                        chargingStationData,
+                        meterData,
+                        controlMessage,
+                        chargingParameters,
+                        currentPrice?.PriceEurocentPerMWh);
+                }
+                catch (ChargingStationException e)
+                {
+                    // Something went wrong in the communication with the charging station.
+                    // All we can do is try again in the next iteration.
+                    _logger.LogError(e, "Failed to send current limit to charging station.");
+                }
+
+                // Remember charging current limit setpoint for next iteration.
+                previousChargingCurrentLimit = chargingCurrentLimit;
+                
+                // wait until next iteration of the control loop
+                await Task.Delay(_loopDelayMillis, stoppingToken);
+            }
+        }
+        catch (Exception e)
+        {
+            _logger.LogCritical(e, "Exiting control loop because of unexpected exception.");
+            throw;
         }
         _logger.LogInformation("Exiting control loop.");
     }
