@@ -10,22 +10,23 @@ string entsoeApiToken = config["EntsoeApiKey"] ?? throw new ConfigurationErrorsE
 
 var priceFetcher = new EntsoePriceFetcher(entsoeApiToken);
 
-var pricesYesterday = await priceFetcher.GetPricesAsync(DateTime.UtcNow.Date.AddDays(-1), CancellationToken.None);
-foreach (ElectricityPrice price in pricesYesterday)
-{
-    Console.WriteLine(price);
-}
+// Get November prices
+DateTime day = new DateTime(2023, 11, 1, 0, 0, 0, 0, DateTimeKind.Local);
 
-await Task.Delay(1000);
-var pricesToday = await priceFetcher.GetPricesAsync(DateTime.UtcNow.Date, CancellationToken.None);
-foreach (ElectricityPrice price in pricesToday)
+using (var fileWriter = new StreamWriter(@"c:\users\wim\november.csv"))
 {
-    Console.WriteLine(price);
-}
-
-await Task.Delay(1000);
-var pricesTomorrow = await priceFetcher.GetPricesAsync(DateTime.UtcNow.Date.AddDays(1), CancellationToken.None);
-foreach (ElectricityPrice price in pricesTomorrow)
-{
-    Console.WriteLine(price);
+    fileWriter.WriteLine($"Time,Price");
+    while (day.Month == 11)
+    {
+        Console.WriteLine($"Fetching prices for {day}");
+        var prices = await priceFetcher.GetPricesAsync(day.ToUniversalTime(), CancellationToken.None);
+        foreach (ElectricityPrice price in prices)
+        {
+            string line = $"{price.Time:o},{price.PriceEurocentPerMWh}";
+            Console.WriteLine(line);
+            fileWriter.WriteLine(line);
+        }
+        day = day.AddDays(1);
+        await Task.Delay(1000);
+    }
 }
