@@ -148,6 +148,10 @@ public class ControlLoop : BackgroundService
                 await Task.Delay(_loopDelayMillis, stoppingToken);
             }
         }
+        catch (TaskCanceledException)
+        {
+            // normal exit during Task.Delay
+        }
         catch (Exception e)
         {
             _logger.LogCritical(e, "Exiting control loop because of unexpected exception.");
