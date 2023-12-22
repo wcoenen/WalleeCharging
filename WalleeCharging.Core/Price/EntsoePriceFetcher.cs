@@ -60,7 +60,7 @@ public class EntsoePriceFetcher : IPriceFetcher
         var electricityPrices = priceElements
             // parse the text values returned by the API into decimals (euro/Mwh)
             .Select(
-                x => decimal.Parse(x.Value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture))
+                x => decimal.Parse(x.Value, NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture))
             // convert the decimal values (euro/MWh) into integers (eurocents/MWh)
             .Select(x => (int)(x*100))
             // finally construct ElectricityPrice objects with a timestamp
