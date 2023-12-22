@@ -1,6 +1,5 @@
 ﻿using System.ComponentModel;
 using System.Configuration;
-using System.Data.HashFunction.CRC;
 using System.IO.Ports;
 using System.Text;
 using Microsoft.Extensions.Configuration;

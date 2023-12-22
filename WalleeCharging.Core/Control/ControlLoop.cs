@@ -1,13 +1,13 @@
-﻿using System.Diagnostics;
-using WalleeCharging.ChargingStation;
+﻿using WalleeCharging.ChargingStation;
 using WalleeCharging.Database;
 using WalleeCharging.Meter;
 using WalleeCharging.Price;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Hosting;
 
 namespace WalleeCharging.Control;
 
-public class ControlLoop
+public class ControlLoop : BackgroundService
 {
     private readonly int _loopDelayMillis;
     private readonly int _maxSafeCurrentAmpere;
@@ -41,7 +41,7 @@ public class ControlLoop
         _logger = logger;
     }
 
-    public async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation(
             "Starting control loop with delay between iterations of {delay} milliseconds. "

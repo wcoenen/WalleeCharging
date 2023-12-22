@@ -35,7 +35,6 @@ builder.Services.AddRazorPages();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IDatabase>(new SqliteDatabase(sqliteFilePath));
 builder.Services.AddSingleton<IPriceFetcher>(new EntsoePriceFetcher(entsoeApiToken));
-builder.Services.AddSingleton<PriceFetchingLoop>();
 builder.Services.AddSingleton<INotificationSink,SignalRNotificationSink>();
 builder.Services.AddSingleton<IMeterDataProvider>(x =>
     new HomeWizardMeterDataProvider(
@@ -46,7 +45,9 @@ builder.Services.AddSingleton<IChargingStation>(x =>
         alfenEveHostname,
         x.GetRequiredService<ILogger<AlfenEveModbusChargingStation>>())
 );
-builder.Services.AddSingleton(x => 
+
+// ControlLoop background worker
+builder.Services.AddHostedService<ControlLoop>(x => 
     new ControlLoop(
         loopDelayMillis: loopDelayMillis,
         maxSafeCurrentAmpere: maxSafeCurrentAmpere,
@@ -57,7 +58,8 @@ builder.Services.AddSingleton(x =>
         x.GetRequiredService<INotificationSink>(),
         x.GetRequiredService<ILogger<ControlLoop>>())
 );
-builder.Services.AddHostedService<BackgroundWorkers>();
+// PriceFetchingLoop background worker
+builder.Services.AddHostedService<PriceFetchingLoop>();
 
 var app = builder.Build();
 

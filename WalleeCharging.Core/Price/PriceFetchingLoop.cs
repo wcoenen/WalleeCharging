@@ -1,10 +1,10 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using WalleeCharging.Database;
-using WalleeCharging.Price;
 
 namespace WalleeCharging.Price;
 
-public class PriceFetchingLoop
+public class PriceFetchingLoop : BackgroundService
 {
     private readonly IPriceFetcher _priceFetcher;
     private readonly IDatabase _database;
@@ -42,7 +42,7 @@ public class PriceFetchingLoop
         }
     }
 
-    public async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Starting price fetching loop.");
         try
