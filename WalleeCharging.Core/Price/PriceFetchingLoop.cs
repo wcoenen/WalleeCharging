@@ -45,26 +45,34 @@ public class PriceFetchingLoop
     public async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Starting price fetching loop.");
-
-        while (!stoppingToken.IsCancellationRequested) 
+        try
         {
-            var now = DateTime.Now;
-            var today = now.Date;
-
-            // fetch today's prices (if we don't have them yet)
-            await FetchPricesIfMissingAsync(today.ToUniversalTime(), stoppingToken);
-           
-            // fetch tomorrow's prices if they may be available by now (and we don't have them yet)
-            var currentTimeCET = TimeZoneInfo.ConvertTimeBySystemTimeZoneId(now, CET_TIMEZONE);
-            if (currentTimeCET.Hour >= 13 && currentTimeCET.Minute >= 10)
+            while (!stoppingToken.IsCancellationRequested) 
             {
-                var tomorrow = today.AddDays(1);
-                await FetchPricesIfMissingAsync(tomorrow.ToUniversalTime(), stoppingToken);
-            }
+                var now = DateTime.Now;
+                var today = now.Date;
 
-            // Check every 5 minutes whether there is something to do
-            await Task.Delay(5*60*1000, stoppingToken);
+                // fetch today's prices (if we don't have them yet)
+                await FetchPricesIfMissingAsync(today.ToUniversalTime(), stoppingToken);
+            
+                // fetch tomorrow's prices if they may be available by now (and we don't have them yet)
+                var currentTimeCET = TimeZoneInfo.ConvertTimeBySystemTimeZoneId(now, CET_TIMEZONE);
+                if (currentTimeCET.Hour >= 13 && currentTimeCET.Minute >= 10)
+                {
+                    var tomorrow = today.AddDays(1);
+                    await FetchPricesIfMissingAsync(tomorrow.ToUniversalTime(), stoppingToken);
+                }
+
+                // Check every 5 minutes whether there is something to do
+                await Task.Delay(5*60*1000, stoppingToken);
+            }
         }
+        catch (Exception e)
+        {
+            _logger.LogCritical(e, "Exiting price fetching loop because of unexpected exception.");
+            throw;
+        }
+        _logger.LogInformation("Exiting price fetching loop.");
     }
 
 }
