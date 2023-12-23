@@ -15,6 +15,6 @@ public class MeterData
 
     public override string ToString()
     {
-        return $"i1={Current1:f2} i2={Current2:f2} i3={Current3:f2} v1={Voltage1} v2={Voltage2} v3={Voltage3}";
+        return $"TotalActivePower={TotalActivePower:f0}w i1={Current1:f2}A i2={Current2:f2}A i3={Current3:f2}A v1={Voltage1}V v2={Voltage2}V v3={Voltage3}V";
     }
 }
