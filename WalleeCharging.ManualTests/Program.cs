@@ -1,8 +1,11 @@
 ﻿using System.ComponentModel;
 using System.Configuration;
+using System.Globalization;
 using System.IO.Ports;
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
+using WalleeCharging.Meter;
 using WalleeCharging.Price;
 
 Console.WriteLine("[1] EntsoePriceFetcher");
@@ -70,8 +73,8 @@ async Task TestP1PortReaderAsync()
         while (true)
         {
             int size = ReadP1Telegram(serialPort.BaseStream, buffer);
-            string text = Encoding.ASCII.GetString(buffer, 0, size);
-            Console.WriteLine(text);
+            var meterData = ParseP1Telegram(buffer, size);
+            Console.WriteLine(meterData);
         }
 
     }
@@ -132,6 +135,79 @@ int ReadP1Telegram(Stream stream, byte[] buffer)
     }
     
     return sizeWithoutChecksum;
+}
+
+void CheckUnit(string line, string actualUnit, string expectedUnit)
+{
+    if (actualUnit != expectedUnit) 
+    {
+        throw new InvalidDataException("Expected unit '{expectedUnit}' but got '{actualUnit}' in '{line}'");
+    }
+}
+
+MeterData ParseP1Telegram(byte[] buffer, int size)
+{
+
+    // example line:
+    // 1-0:31.7.0(002.52*A)
+    //
+    // which parsers to:
+    //      obisCode = "1-0:31.7.0"
+    //      measurementValue = "002.52"
+    //      measurementUnit = "A"
+    var regex = new Regex(@"(?<obisCode>[\d\.:\-]+)\((?<measurementValue>[^*\)]+)\*(?<measurementUnit>[^\)]+)\)");
+
+    var meterData = new MeterData();
+
+    using (var stream = new MemoryStream(buffer, 0, size))
+    using (var textReader = new StreamReader(stream, Encoding.ASCII))
+    {
+        string? line;
+        while ((line = textReader.ReadLine()) != null)
+        {
+            var match = regex.Match(line);
+            if (match.Success)
+            {
+                string obisCode = match.Groups["obisCode"].Value;
+                string measurementValue = match.Groups["measurementValue"].Value;
+                string measurementUnit = match.Groups["measurementUnit"].Value;
+                
+                switch (obisCode)
+                {
+                    case "1-0:31.7.0":
+                        CheckUnit(line, measurementUnit, "A");
+                        meterData.Current1 = float.Parse(measurementValue);
+                        break;
+                    case "1-0:51.7.0":
+                        CheckUnit(line, measurementUnit, "A");
+                        meterData.Current2 = float.Parse(measurementValue);
+                        break;
+                    case "1-0:71.7.0":
+                        CheckUnit(line, measurementUnit, "A");
+                        meterData.Current3 = float.Parse(measurementValue);
+                        break;
+                    case "1-0:32.7.0":
+                        CheckUnit(line, measurementUnit, "V");
+                        meterData.Voltage1 = float.Parse(measurementValue);
+                        break;
+                    case "1-0:52.7.0":
+                        CheckUnit(line, measurementUnit, "V");
+                        meterData.Voltage2 = float.Parse(measurementValue);
+                        break;
+                    case "1-0:72.7.0":
+                        CheckUnit(line, measurementUnit, "V");
+                        meterData.Voltage3 = float.Parse(measurementValue);
+                        break;
+                    case "1-0:1.7.0":
+                        CheckUnit(line, measurementUnit, "kW");
+                        meterData.TotalActivePower = 1000 * float.Parse(measurementValue);
+                        break;
+                }
+            }
+        }
+    }
+
+    return meterData;
 }
 
 // Ported to C# from C code at https://github.com/jantenhove/P1-Meter-ESP8266/blob/master/CRC16.h
