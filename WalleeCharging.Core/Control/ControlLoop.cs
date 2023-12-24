@@ -80,13 +80,10 @@ public class ControlLoop : BackgroundService
                     {
                         // Price is acceptable.
                         // The next checks require data from the meter and charging station.
-                        // Don't "await" yet; fetch data in parallel.
-                        var meterDataTask = _meterDataProvider.GetMeterDataAsync();
-                        var chargingStationDataTask = _chargingStation.GetChargingStationDataAsync();
-
-                        // Make sure all tasks have completed.
-                        meterData = await meterDataTask;
-                        chargingStationData = await chargingStationDataTask;
+                        // We get the meter data first to sync to fresh output of the P1 port.
+                        // (Getting "fresh" data may not be possible for all IMeterDataProvider implementations.)
+                        meterData = await _meterDataProvider.GetMeterDataAsync();
+                        chargingStationData = await _chargingStation.GetChargingStationDataAsync();
 
                         // Calculate both constraints and apply the smaller result.
                         float charging_current_constraint1 = GetMaxCurrentWire(chargingParameters, meterData, chargingStationData);

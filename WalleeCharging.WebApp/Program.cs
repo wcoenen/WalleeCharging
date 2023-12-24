@@ -6,6 +6,7 @@ using WalleeCharging.Control;
 using WalleeCharging.WebApp.Services;
 using WalleeCharging.WebApp;
 using Serilog;
+using System.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,22 +25,36 @@ builder.Host.UseSerilog((context, config) => config.ReadFrom.Configuration(conte
 var config = builder.Configuration;
 config.AddEnvironmentVariables();
 string alfenEveHostname =   config.GetRequiredValue("AlfenEveHostName");
-string homeWizardUrl =      config.GetRequiredValue("HomeWizardApiUrl");
 string entsoeApiToken =     config.GetRequiredValue("EntsoeApiKey");
 int maxSafeCurrentAmpere =  config.GetRequiredValue<int>("MaxSafeCurrentAmpere");
 int loopDelayMillis =       config.GetRequiredValue<int>("LoopDelayMillis");
 bool shadowMode =           config.GetRequiredValue<bool>("ShadowMode");
+string meterDataSource =    config.GetRequiredValue<string>("MeterDataSource");
 
-// Add services to the container.
+// add meter data source to the container
+if (meterDataSource == "P1")
+{
+    builder.Services.AddSingleton<IMeterDataProvider,P1MeterDataProvider>();
+}
+else if (meterDataSource == "HomeWizard")
+{
+    string homeWizardUrl = config.GetRequiredValue("HomeWizardApiUrl");
+    builder.Services.AddSingleton<IMeterDataProvider>(x =>
+        new HomeWizardMeterDataProvider(
+            homeWizardUrl,
+            x.GetRequiredService<ILogger<HomeWizardMeterDataProvider>>()));
+}
+else
+{
+    throw new ConfigurationErrorsException("Unknown MeterDataSource '{meterDataSource}'");
+}
+
+// Add other services to the container.
 builder.Services.AddRazorPages();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IDatabase>(new SqliteDatabase(sqliteFilePath));
 builder.Services.AddSingleton<IPriceFetcher>(new EntsoePriceFetcher(entsoeApiToken));
 builder.Services.AddSingleton<INotificationSink,SignalRNotificationSink>();
-builder.Services.AddSingleton<IMeterDataProvider>(x =>
-    new HomeWizardMeterDataProvider(
-        homeWizardUrl,
-        x.GetRequiredService<ILogger<HomeWizardMeterDataProvider>>()));
 builder.Services.AddSingleton<IChargingStation>(x =>
     new AlfenEveModbusChargingStation(
         alfenEveHostname,
@@ -84,5 +99,3 @@ app.MapRazorPages();
 app.MapHub<SignalRHub>("/signalr");
 
 app.Run();
-
-
