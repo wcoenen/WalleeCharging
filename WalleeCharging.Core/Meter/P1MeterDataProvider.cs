@@ -1,3 +1,4 @@
+using System;
 using System.IO.Ports;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -33,7 +34,7 @@ public class P1MeterDataProvider : IMeterDataProvider, IAsyncDisposable
             serialPort.PortName = "/dev/ttyUSB0";
             serialPort.BaudRate = 115200;
             serialPort.Handshake = Handshake.XOnXOff;
-            serialPort.ReadTimeout = 2000;
+            serialPort.ReadTimeout = 1; // set to a very low value so we know when the buffer is empty
             serialPort.Open();
 
             var buffer = new byte[2048];
@@ -73,15 +74,23 @@ public class P1MeterDataProvider : IMeterDataProvider, IAsyncDisposable
 
     private void ProvideMeterData(MeterData meterData)
     {
+        // Retrieve the value of _taskCompletionSource, and reset to null.
+        // This has to be done within a lock to prevent _taskCompletionSource from being set between the two statements,
+        // which would then result in the task never completing.
+        TaskCompletionSource<MeterData>? taskCompletionSource;
         lock (_lock)
         {
-            // If _taskCompletionSource is null, discard meter data.
-            // Otherwise, set the result for the GetMeterDataAsync callers that are currently waiting for fresh meter data.
-            if (_taskCompletionSource != null)
-            {
-                _taskCompletionSource.SetResult(meterData);
-                _taskCompletionSource = null;
-            }
+            taskCompletionSource = _taskCompletionSource;
+            _taskCompletionSource = null;
+        }
+
+        // Provide a result for the GetMeterDataAsync callers that are currently waiting for fresh meter data.
+        // This has to be done outside of the lock statement to prevent a deadlock. Why? Because continuations
+        // of_taskCompletionSource.Task may run synchronously and call GetMeterDataAsync again, which attempts
+        // to take the same lock.
+        if (taskCompletionSource != null)
+        {
+            taskCompletionSource.SetResult(meterData);
         }
     }
 
@@ -109,11 +118,18 @@ public class P1MeterDataProvider : IMeterDataProvider, IAsyncDisposable
         // Read byte by byte until we find the start marker '/'
         while (buffer[0] != (byte)'/')
         {
-            int bytesRead = stream.Read(buffer, 0, 1);
+            int bytesRead;
+            try
+            {
+                bytesRead = stream.Read(buffer, 0, 1);
+            }
+            catch (TimeoutException)
+            {
+                bytesRead = 0;
+            }
             if (bytesRead == 0)
             {
                 // avoid CPU spinning while waiting for data
-                _logger.LogDebug("*");
                 await Task.Delay(50);
             }
         }
@@ -127,11 +143,18 @@ public class P1MeterDataProvider : IMeterDataProvider, IAsyncDisposable
             {
                 throw new InvalidDataException("Encountered telegram larger than buffer");
             }
-            int bytesRead = stream.Read(buffer, offset, 1);
+            int bytesRead;
+            try
+            {
+                bytesRead = stream.Read(buffer, offset, 1);
+            }
+            catch (TimeoutException) 
+            {
+                bytesRead = 0;
+            }
             if (bytesRead == 0)
             {
                 // avoid CPU spinning while waiting for data
-                _logger.LogDebug("*");
                 await Task.Delay(50);
             }
             else
