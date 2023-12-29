@@ -9,6 +9,6 @@ public class ChargingStationData
 
     public override string ToString()
     {
-        return $"RealPowerSum={RealPowerSum} Current1={Current1:f2} Current2={Current2:f2} Current3={Current3:f2}";
+        return $"RealPowerSum={RealPowerSum}W Current1={Current1:f2}A Current2={Current2:f2}A Current3={Current3:f2}A";
     }
 }

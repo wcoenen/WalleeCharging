@@ -82,8 +82,19 @@ public class ControlLoop : BackgroundService
                         // The next checks require data from the meter and charging station.
                         // We get the meter data first to sync to fresh output of the P1 port.
                         // (Getting "fresh" data may not be possible for all IMeterDataProvider implementations.)
-                        meterData = await _meterDataProvider.GetMeterDataAsync();
-                        chargingStationData = await _chargingStation.GetChargingStationDataAsync();
+                        // If the meter and charging station data is not consistent, we read both again.
+                        int inconsistentCount = 0;
+                        do
+                        {
+                            meterData = await _meterDataProvider.GetMeterDataAsync();
+                            chargingStationData = await _chargingStation.GetChargingStationDataAsync();
+                        }
+                        while (!IsConsistentData(meterData, chargingStationData) && ++inconsistentCount < 10);
+                        
+                        if (inconsistentCount >= 10)
+                        {
+                            throw new InconsistentDataException("Unable to get consistent data from meter and charging station.");
+                        }
 
                         // Calculate both constraints and apply the smaller result.
                         float charging_current_constraint1 = GetMaxCurrentWire(chargingParameters, meterData, chargingStationData);
@@ -103,8 +114,8 @@ public class ControlLoop : BackgroundService
                     catch (Exception e) when (e is ChargingStationException || e is MeterDataException)
                     {
                         // Something went wrong in the communication with the meter or charging station.
-                        // Disable charging for now.
-                        chargingCurrentLimit = 0;
+                        // Keeping charging current the same for now.
+                        chargingCurrentLimit = previousChargingCurrentLimit;
                         controlMessage = $"Error occurred: {e.Message}";
                         _logger.LogError(e, "Failed to retrieve information in control loop.");
                     }
@@ -147,7 +158,7 @@ public class ControlLoop : BackgroundService
         }
         catch (TaskCanceledException)
         {
-            // normal exit during Task.Delay
+            // normal exit via stoppingToken during Task.Delay
         }
         catch (Exception e)
         {
@@ -155,6 +166,21 @@ public class ControlLoop : BackgroundService
             throw;
         }
         _logger.LogInformation("Exiting control loop.");
+    }
+
+    private bool IsConsistentData(MeterData meterData, ChargingStationData chargingStationData)
+    {
+        if (meterData.TotalActivePower < chargingStationData.RealPowerSum)
+        {
+            _logger.LogWarning("Meter data is not showing (all) the power use reported by the charging station.\n"
+                    +"This data will be ignored and fresh data will be fetched.\n"
+                    +"Meter data: {meterData}\n"
+                    +"Charging Station data: {chargingStationData}",
+                meterData,
+                chargingStationData);
+            return false;
+        }
+        return true;
     }
 
     private async Task LogAndNotify(
@@ -210,13 +236,6 @@ public class ControlLoop : BackgroundService
     {
         // current constraint 2: account for other consumers and do not exceed MaxTotalPowerWatts
         float non_charger_power = meterData.TotalActivePower - chargingStationData.RealPowerSum;
-        if (non_charger_power < 0)
-        {
-            // This can only mean the meter data is out of date and not yet accounting for the charging power.
-            // Log a warning and assume meterData.TotalActivePower is all from other consumers.
-            _logger.LogWarning("Meter data is not yet showing charging, GetMaxCurrentCapacityTarif result may be unreliable!");
-            non_charger_power = meterData.TotalActivePower;
-        }
         float power_available_for_charging = chargingParameters.MaxTotalPowerWatts - non_charger_power;
         float voltage_sum = meterData.Voltage1 + meterData.Voltage2 + meterData.Voltage3;
         float charging_current_constraint2 = power_available_for_charging / voltage_sum;
