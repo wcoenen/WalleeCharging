@@ -80,7 +80,7 @@ public class AlfenEveModbusChargingStation : IChargingStation, IDisposable
             
             return data;
         }
-        catch (IOException e)
+        catch (Exception e) when (e is IOException || e is SocketException)
         {
             throw new ChargingStationException($"Failed to fetch data from charging station at {_hostname}", e);
         }
@@ -95,7 +95,7 @@ public class AlfenEveModbusChargingStation : IChargingStation, IDisposable
             ushort[] newRegisterValues = FloatToRegisterValues(currentLimitAmpere);
             await _modbusMaster.WriteMultipleRegistersAsync(CHARGING_SOCKET_ID, REGISTER_MAX_CURRENT_SETPOINT, newRegisterValues);
         }
-        catch (IOException e)
+        catch (Exception e) when (e is IOException || e is SocketException)
         {
             throw new ChargingStationException($"Failed to send current limit to charging station at {_hostname}", e);
         }
