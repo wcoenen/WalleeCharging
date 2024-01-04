@@ -29,6 +29,7 @@ public class AlfenEveModbusChargingStation : IChargingStation, IDisposable
     private readonly ushort REGISTER_CURRENT_PHASE_1 = 320;
     private readonly ushort REGISTER_REAL_POWER_SUM = 344;
     private readonly ushort REGISTER_MAX_CURRENT_SETPOINT = 1210;
+    private readonly int WARN_TRESHOLD_MILLISECONDS = 200;
 
     private readonly string _hostname;
     private readonly ILogger<AlfenEveModbusChargingStation> _logger;
@@ -69,7 +70,9 @@ public class AlfenEveModbusChargingStation : IChargingStation, IDisposable
             ushort count = (ushort)(REGISTER_REAL_POWER_SUM - REGISTER_CURRENT_PHASE_1 + 2);
             ushort[] registerValues = await _modbusMaster.ReadHoldingRegistersAsync(CHARGING_SOCKET_ID, REGISTER_CURRENT_PHASE_1, count);
             _stopWatch.Stop();
-            _logger.LogDebug("Getting currents and RealPowerSum over modbus took {millis} milliseconds", _stopWatch.ElapsedMilliseconds);
+
+            var logLevel = _stopWatch.ElapsedMilliseconds >= WARN_TRESHOLD_MILLISECONDS ? LogLevel.Warning : LogLevel.Debug;
+            _logger.Log(logLevel, "Getting currents and RealPowerSum over modbus took {millis} milliseconds", _stopWatch.ElapsedMilliseconds);
 
             data.Current1 = ModbusUtility.GetSingle(registerValues[0], registerValues[1]);
             data.Current2 = ModbusUtility.GetSingle(registerValues[2], registerValues[3]);
@@ -93,7 +96,14 @@ public class AlfenEveModbusChargingStation : IChargingStation, IDisposable
             ConnectIfNeeded();
 
             ushort[] newRegisterValues = FloatToRegisterValues(currentLimitAmpere);
+
+            _stopWatch.Reset();
+            _stopWatch.Start();
             await _modbusMaster.WriteMultipleRegistersAsync(CHARGING_SOCKET_ID, REGISTER_MAX_CURRENT_SETPOINT, newRegisterValues);
+            _stopWatch.Stop();
+
+            var logLevel = _stopWatch.ElapsedMilliseconds >= WARN_TRESHOLD_MILLISECONDS ? LogLevel.Warning : LogLevel.Debug;
+            _logger.Log(logLevel, "Setting current limit over modbus took {millis} milliseconds", _stopWatch.ElapsedMilliseconds);
         }
         catch (Exception e) when (e is IOException || e is SocketException)
         {
@@ -105,6 +115,8 @@ public class AlfenEveModbusChargingStation : IChargingStation, IDisposable
     {
         if (!_tcpClient.Connected)
         {
+            _logger.LogWarning("Reconnecting to charging station.");
+
             _modbusMaster.Dispose();
             _tcpClient.Dispose();
             
