@@ -29,7 +29,7 @@ public class AlfenEveModbusChargingStation : IChargingStation, IDisposable
     private readonly ushort REGISTER_CURRENT_PHASE_1 = 320;
     private readonly ushort REGISTER_REAL_POWER_SUM = 344;
     private readonly ushort REGISTER_MAX_CURRENT_SETPOINT = 1210;
-    private readonly int WARN_TRESHOLD_MILLISECONDS = 200;
+    private readonly int WARN_TRESHOLD_MILLISECONDS = 500;
 
     private readonly string _hostname;
     private readonly ILogger<AlfenEveModbusChargingStation> _logger;
