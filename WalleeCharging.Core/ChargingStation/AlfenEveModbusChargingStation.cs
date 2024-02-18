@@ -83,7 +83,7 @@ public class AlfenEveModbusChargingStation : IChargingStation, IDisposable
             
             return data;
         }
-        catch (Exception e) when (e is IOException || e is SocketException)
+        catch (Exception e) when (e is IOException || e is SocketException || e is SlaveException)
         {
             throw new ChargingStationException($"Failed to fetch data from charging station at {_hostname}", e);
         }
@@ -105,7 +105,7 @@ public class AlfenEveModbusChargingStation : IChargingStation, IDisposable
             var logLevel = _stopWatch.ElapsedMilliseconds >= WARN_TRESHOLD_MILLISECONDS ? LogLevel.Warning : LogLevel.Debug;
             _logger.Log(logLevel, "Setting current limit over modbus took {millis} milliseconds", _stopWatch.ElapsedMilliseconds);
         }
-        catch (Exception e) when (e is IOException || e is SocketException)
+        catch (Exception e) when (e is IOException || e is SocketException || e is SlaveException)
         {
             throw new ChargingStationException($"Failed to send current limit to charging station at {_hostname}", e);
         }
