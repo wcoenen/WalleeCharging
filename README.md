@@ -15,3 +15,6 @@ To optimize for dynamic prices, I need to shift electricity consumption as much 
 But to optimize for the capacity tariff, I would also like to limit the monthly power peak, as each kilowatt of peak power costs about 50 euro/year.
 This software helps me to explore the tension between these two concerns.
 
+# Copying
+
+P1MeterDataProvider.cs contains code adapted from https://github.com/jantenhove/P1-Meter-ESP8266/blob/master/CRC16.h , and that code was licensed under the GNU GPL v3 license. Therefore, this project is also licensed under the terms of the GNU GPL v3 license. The full text is in the LICENSE file.
