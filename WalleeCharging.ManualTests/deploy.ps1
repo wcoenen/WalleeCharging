@@ -10,5 +10,8 @@ if (Test-Path $publishFolder)
 
 dotnet publish
 
+$targetHostname = (Read-Host 'Enter user@hostname target')
+$targetPath = (Read-Host 'Enter target folder')
+
 Write-Host 'Copying files'
-scp -r "$publishFolder\*" wim@wallee.local:/home/wim/WalleeManualTests
+scp -r "$publishFolder\*" "$($targetHostname):$targetPath"
