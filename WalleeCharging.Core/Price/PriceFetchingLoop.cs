@@ -67,9 +67,18 @@ public class PriceFetchingLoop : BackgroundService
                 await Task.Delay(5*60*1000, stoppingToken);
             }
         }
-        catch (TaskCanceledException)
+        catch (TaskCanceledException e)
         {
-            // normal exit during Task.Delay
+            if (stoppingToken.IsCancellationRequested)
+            {
+                // normal exit during Task.Delay, nothing to do
+            }
+            else
+            {
+                _logger.LogCritical(e, "Exiting price fetching loop because of unexpected TaskCanceledException.");
+                throw;
+            }
+
         }
         catch (Exception e)
         {
