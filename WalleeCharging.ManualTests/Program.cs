@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Configuration;
 using WalleeCharging.Price;
 using WalleeCharging.ManualTests;
+using System.Text;
 
 Console.WriteLine("[1] EntsoePriceFetcher");
 Console.WriteLine("[2] P1PortReader");
@@ -22,6 +23,22 @@ switch (choice)
 
 async Task TestEntsoePriceFetcherAsync()
 {
+    Console.WriteLine("Enter year and month to fetch prices for.");
+    Console.WriteLine("Year (4 digits):");
+    string? yearText = Console.ReadLine();
+    Console.WriteLine("Month (1 or 2 digits):");
+    string? monthText = Console.ReadLine();
+    if ((string.IsNullOrEmpty(yearText)) || string.IsNullOrEmpty(monthText))
+    {
+        Console.WriteLine("ERROR: Unable to parse!");
+        return;
+    }
+    int year = Int32.Parse(yearText);
+    int month = Int32.Parse(monthText);
+
+    // Where to save
+
+
     // Get the API token via the dotnet user secrets.
     var config = new ConfigurationBuilder()
         .AddUserSecrets<Program>()
@@ -30,13 +47,17 @@ async Task TestEntsoePriceFetcherAsync()
 
     var priceFetcher = new EntsoePriceFetcher(entsoeApiToken);
 
-    // Get November prices
-    DateTime day = new DateTime(2023, 11, 1, 0, 0, 0, 0, DateTimeKind.Local);
-
-    using (var fileWriter = new StreamWriter(@"c:\users\wim\november.csv"))
+    // Get prices
+    string targetFilePath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        "Downloads",
+        $"{year:d4}{month:d2}.csv");
+    DateTime firstDay = new DateTime(year, month, 1, 0, 0, 0, 0, DateTimeKind.Local);
+    DateTime day = firstDay;
+    using (var fileWriter = new StreamWriter(targetFilePath))
     {
         fileWriter.WriteLine($"Time,Price");
-        while (day.Month == 11)
+        while (day.Month == firstDay.Month)
         {
             Console.WriteLine($"Fetching prices for {day}");
             var prices = await priceFetcher.GetPricesAsync(day.ToUniversalTime(), CancellationToken.None);
@@ -50,6 +71,7 @@ async Task TestEntsoePriceFetcherAsync()
             await Task.Delay(1000);
         }
     }
+    Console.WriteLine($"Done! Prices written to '{targetFilePath}'");
 }
 
 async Task TestP1PortReaderAsync()
