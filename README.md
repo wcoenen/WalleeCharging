@@ -3,7 +3,7 @@
 WalleeCharging is a hobby project created to control an Alfen Eve Single S-line. This is the EVSE ("electric vehicle supply equipment") that I use at home to charge my car. The code should be adaptable to other EVSE systems as well,
 as long as they support control an energy management system.
 
-![screenshot of WalleeCharging on my phone](/doc/wallee-screenshot.jpg)
+<img src="/doc/wallee-screenshot.jpg" alt="screenshot of WalleeCharging on my phone" width="200" />
 
 It provides the following features which I was missing in my EVSE:
 - limit charging to times when the electricity price (as set by the day-ahead market) is below some treshold
