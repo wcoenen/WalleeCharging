@@ -45,7 +45,7 @@ async Task TestEntsoePriceFetcherAsync()
         .Build();
     string entsoeApiToken = config["EntsoeApiKey"] ?? throw new ConfigurationErrorsException("missing EntsoeApiKey");
 
-    var priceFetcher = new EntsoePriceFetcher(entsoeApiToken);
+    var priceFetcher = new EntsoePriceFetcher(entsoeApiToken, new ConsoleLogger<EntsoePriceFetcher>());
 
     // Get prices
     string targetFilePath = Path.Combine(

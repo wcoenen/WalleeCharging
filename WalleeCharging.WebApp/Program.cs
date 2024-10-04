@@ -53,7 +53,10 @@ else
 builder.Services.AddRazorPages();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IDatabase>(new SqliteDatabase(sqliteFilePath));
-builder.Services.AddSingleton<IPriceFetcher>(new EntsoePriceFetcher(entsoeApiToken));
+builder.Services.AddSingleton<IPriceFetcher>(x => 
+    new EntsoePriceFetcher(
+        entsoeApiToken,
+        x.GetRequiredService<ILogger<EntsoePriceFetcher>>()));
 builder.Services.AddSingleton<INotificationSink,SignalRNotificationSink>();
 builder.Services.AddSingleton<IChargingStation>(x =>
     new AlfenEveModbusChargingStation(

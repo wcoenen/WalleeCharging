@@ -25,13 +25,13 @@ public class PriceFetchingLoop : BackgroundService
             try
             {
                 var prices = await _priceFetcher.GetPricesAsync(day, cancellationToken);
-                if (prices == null)
+                if ((prices == null) || prices.Length == 0)
                 {
                     _logger.LogWarning("Prices for {day:o} were not available.", day);
                 }
                 else
                 {
-                    _logger.LogInformation($"Saving prices for {day:o}.", day);
+                    _logger.LogInformation("Saving price {nbPricePoints} price points for {day:o}.", prices.Length, day);
                     await _database.SavePricesAsync(prices);
                 }
             }
