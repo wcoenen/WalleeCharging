@@ -9,7 +9,6 @@ public class PriceFetchingLoop : BackgroundService
     private readonly IPriceFetcher _priceFetcher;
     private readonly IDatabase _database;
     private readonly ILogger<PriceFetchingLoop> _logger;
-    private readonly string CET_TIMEZONE = "Central European Standard Time";
 
     public PriceFetchingLoop(IPriceFetcher priceFetcher, IDatabase database, ILogger<PriceFetchingLoop> logger)
     {
@@ -24,7 +23,7 @@ public class PriceFetchingLoop : BackgroundService
         {
             try
             {
-                var prices = await _priceFetcher.GetPricesAsync(day, cancellationToken);
+                var prices = await _priceFetcher.GetPricesAsync(day.Year, day.Month, day.Day, cancellationToken);
                 if ((prices == null) || prices.Length == 0)
                 {
                     _logger.LogWarning("Prices for {day:o} were not available.", day);
@@ -56,8 +55,7 @@ public class PriceFetchingLoop : BackgroundService
                 await FetchPricesIfMissingAsync(today.ToUniversalTime(), stoppingToken);
             
                 // fetch tomorrow's prices if they may be available by now (and we don't have them yet)
-                var currentTimeCET = TimeZoneInfo.ConvertTimeBySystemTimeZoneId(now, CET_TIMEZONE);
-                if (currentTimeCET.Hour >= 13 && currentTimeCET.Minute >= 10)
+                if (now.Hour >= 13 && now.Minute >= 10)
                 {
                     var tomorrow = today.AddDays(1);
                     await FetchPricesIfMissingAsync(tomorrow.ToUniversalTime(), stoppingToken);

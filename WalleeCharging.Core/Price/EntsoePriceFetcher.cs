@@ -16,7 +16,7 @@ public class EntsoePriceFetcher : IPriceFetcher
     private readonly string DOMAIN = "10YBE----------2";
     private readonly string URL_TEMPLATE = 
     "https://web-api.tp.entsoe.eu/api?"
-        +"securityToken={0}&documentType=A44&in_Domain={1}&out_Domain={1}&TimeInterval={2}";
+        +"securityToken={0}&documentType=A44&in_Domain={1}&out_Domain={1}&periodStart={2}&periodEnd={3}";
     
     private readonly string _apiKey;
     private readonly HttpClient _httpClient;
@@ -29,28 +29,22 @@ public class EntsoePriceFetcher : IPriceFetcher
         _httpClient = new HttpClient();
     }
 
-    public async Task<ElectricityPrice[]> GetPricesAsync(DateTime day, CancellationToken cancellationToken)
+    public async Task<ElectricityPrice[]> GetPricesAsync(int year, int month, int day, CancellationToken cancellationToken)
     {
-        if (day.Kind != DateTimeKind.Utc)
-            throw new ArgumentException("DateTimeKind must be UTC");
-
         // rate limit
         await Task.Delay(1000, cancellationToken);
 
-        // The entsoe API accepts a TimeInterval query parameter formatted as the start and end of the
-        // time interval in ISO 8601 format, with a slash between them.
-        // Example from the entso.eu API documentation: "2016-01-01T00:00Z/2016-01-02T00:00Z"
-        var dayEnd = day.AddDays(1);
-        string timeInterval = 
-            day.ToString("o", CultureInfo.InvariantCulture) 
-            + "/"
-            + dayEnd.ToString("o", CultureInfo.InvariantCulture);
-
+        // The entsoe API accepts periodStart and periodEnd query parameters formatted as yyyyMMddHHmm.
+        // To fetch the data of one day, these should be the same.
+        DateTime periodStart = new DateTime(year, month, day);
+        string periodStartText = periodStart.ToString("yyyyMMddHHmm");
+        _logger.Log(LogLevel.Debug, "requesting prices from entso.eu api for {periodStartText}", periodStartText);
         string url = string.Format(
             URL_TEMPLATE,
             HttpUtility.UrlEncode(_apiKey),
             HttpUtility.UrlEncode(DOMAIN),
-            HttpUtility.UrlEncode(timeInterval));
+            HttpUtility.UrlEncode(periodStartText),
+            HttpUtility.UrlEncode(periodStartText));
 
         try
         {
@@ -67,40 +61,136 @@ public class EntsoePriceFetcher : IPriceFetcher
                 throw new InvalidDataException();
             }
 
-            // The entso.eu API will sometimes update the "publication document" version embedded in the XML namespace without warning.
+            // The entso.eu API will sometimes update the "publication document" version embedded in the XML namespace without warning
+            // and without managing multiple versions of the API.
+            //
             // Example namespaces:
             //      urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:0
             //      urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3
-            // So we have little choice but to accept any namespace and just assume <price.amount> elements will be present.
+            //
+            // So we have little choice but to accept any namespace.
             string namespaceName = xdoc.Root.Name.Namespace.NamespaceName;
-            var priceElementName = XName.Get("price.amount", namespaceName);
-            var priceElements = xdoc.Descendants(priceElementName);
 
-            DateTime dayUtc = day.ToUniversalTime();
-            var electricityPrices = priceElements
-                // parse the text values returned by the API into decimals (euro/Mwh)
-                .Select(
-                    x => decimal.Parse(x.Value, NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture))
-                // convert the decimal values (euro/MWh) into integers (eurocents/MWh)
-                .Select(x => (int)(x*100))
-                // finally construct ElectricityPrice objects with a timestamp
-                .Select((price,index)=>
-                    new ElectricityPrice(dayUtc.AddHours(index), price))
-                .ToArray();
-
-            // Normally we expect to get 24 price points for a day.
-            // It can be one more or one less during summer/winter time transitions.
-            // Any other number, such as zero, is a problem.
-            if (electricityPrices.Length < 23 || electricityPrices.Length > 25)
+            // Check that there is only one time resolution in the response, and it is PT60M.
+            var resolutionElementName = XName.Get("resolution", namespaceName);
+            string timeResolution = xdoc.Descendants(resolutionElementName).Single().Value;
+            if (timeResolution != "PT60M")
             {
-                throw new PriceFetcherException($"Received {electricityPrices.Length} price points from entso.eu API");
+                throw new InvalidDataException($"Expected time resolution 'PT60M' in response from entso.eu API but got '{timeResolution}'");
             }
+
+            // Get the time interval from the response.
+            var timeIntervalElementName = XName.Get("period.timeInterval", namespaceName);
+            var startElementName = XName.Get("start", namespaceName);
+            var endElementName = XName.Get("end", namespaceName);
+            var timeIntervalElement = xdoc.Descendants(timeIntervalElementName).Single();
+            string? startText = timeIntervalElement.Element(startElementName)?.Value;
+            string? endText = timeIntervalElement.Element(endElementName)?.Value;
+            if (startText == null || endText == null)
+            {
+                throw new InvalidDataException("Missing time interval data in in response from entso.eu API");
+            }
+            DateTime startTime = DateTime.Parse(startText, null, DateTimeStyles.RoundtripKind);
+            DateTime endTime = DateTime.Parse(endText, null, DateTimeStyles.RoundtripKind);
+            if (startTime > endTime)
+            {
+                throw new InvalidDataException($"Got improper time interval in response from entso.eu API: {startText} to {endText}");
+            }
+
+            // Extract price points. Each price point is structured as shown below,
+            // with the position representing the exact time in the requested time range.
+            //
+            // To calculate the time when a price takes effect, we subtract one from the position
+            // (to turn it into a proper zero-based offset) and then add that number of hours to the
+            // start of the requested range.
+            //
+            // Unfortunately, it seems that the API can omit positions if the price doesn't change.
+            // For example, if position 23 is missing, then the price of position 22 is in effect
+            // for more than one hour. Trying to fill in such holes would be complicated by the fact that
+            // there are days with only 23 hours for summer to winter daylight saving transitions,
+            // so it may not be obvious whether position 24 is actually missing or just doesn't exist.
+            // So we do not attempt to fill in these holes; we just return the prices provided by the API.
+            //
+            // <Point>
+            //        <position>1</position>
+            //        <price.amount>74.33</price.amount>
+            // </Point>
             
-            return electricityPrices;
+            var pointElementName = XName.Get("Point", namespaceName);
+            var positionElementName = XName.Get("position", namespaceName);
+            var priceElementName = XName.Get("price.amount", namespaceName);
+            var pointElements = xdoc.Descendants(pointElementName);
+            var pricePointList = new List<ElectricityPrice>();
+            int previousPosition = 0;
+            ElectricityPrice lastPricePoint;
+
+            foreach (var pointElement in pointElements)
+            {
+                var positionElement = pointElement.Element(positionElementName);
+                if (positionElement == null)
+                {
+                    throw new InvalidDataException("entso.eu API response has a 'Point' point without a 'position'.");
+                }
+                int position = Int32.Parse(positionElement.Value);
+                              
+                // Check for holes in the data at the start, these cannot be filled.
+                if (previousPosition == 0 && position != 1)
+                {
+                    throw new InvalidDataException("entso.eu API response does not start with a 'Point' at position 1");
+                }
+
+                // Check for improper order of the points.
+                // Should never happen, but we need to be careful to avoid an infinite loop below.
+                if (position < previousPosition)
+                {
+                    throw new InvalidDataException("entso.eu API response has a 'Point' point with a 'position' that indicates improper order.");
+                }
+
+                // Check for non-consecutive "position" values and fill in the holes in the data.
+                // We do this by just adding one hour to the previous price point and copying the price.
+                while (position != (previousPosition + 1))
+                {
+                    lastPricePoint = pricePointList[pricePointList.Count - 1];
+                    pricePointList.Add(new ElectricityPrice(lastPricePoint.Time.AddHours(1), lastPricePoint.PriceEurocentPerMWh));
+                    previousPosition++;
+                }
+
+                // Add a price point for the current Point element
+                var priceElement = pointElement.Element(priceElementName);
+                if (priceElement == null)
+                {
+                    throw new InvalidDataException("HTTP request to entso.eu API returned a 'Point' point without a 'price.amount'.");
+                }
+                decimal priceEuroMWh = decimal.Parse(priceElement.Value, NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+                int priceEurocentMWh = (int)(priceEuroMWh * 100);
+                int offset = position - 1;
+                var pointDateTime = startTime.AddHours(offset);
+                pricePointList.Add(new ElectricityPrice(pointDateTime, priceEurocentMWh));
+
+                previousPosition++;
+            }
+
+            // Check for missing data after the last price point, and fill it in if necessary.
+            lastPricePoint = pricePointList[pricePointList.Count - 1];
+            while (lastPricePoint.Time.AddHours(1) < endTime)
+            {
+                pricePointList.Add(new ElectricityPrice(lastPricePoint.Time.AddHours(1), lastPricePoint.PriceEurocentPerMWh));
+                lastPricePoint = pricePointList[pricePointList.Count - 1];
+            }
+         
+            return pricePointList.ToArray();
         }
-        catch (Exception e) when (e is TaskCanceledException || e is HttpRequestException || e is XmlException || e is FormatException || e is InvalidDataException)
+        catch (HttpRequestException e)
         {
-            throw new PriceFetcherException("HTTP request to entso.eu API either failed, was cancelled, or returned unexpected data", e);
+            throw new PriceFetcherException("HTTP request to entso.eu API failed.", e);
+        }
+        catch (TaskCanceledException e)
+        {
+            throw new PriceFetcherException("HTTP request to entso.eu API timed out or was cancelled.", e);
+        }
+        catch (Exception e) when (e is XmlException || e is FormatException || e is InvalidDataException || e is InvalidOperationException)
+        {
+            throw new PriceFetcherException("HTTP request to entso.eu API returned unexpected data", e);
         }
 
     }

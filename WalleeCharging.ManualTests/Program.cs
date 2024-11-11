@@ -36,9 +36,6 @@ async Task TestEntsoePriceFetcherAsync()
     int year = Int32.Parse(yearText);
     int month = Int32.Parse(monthText);
 
-    // Where to save
-
-
     // Get the API token via the dotnet user secrets.
     var config = new ConfigurationBuilder()
         .AddUserSecrets<Program>()
@@ -52,7 +49,7 @@ async Task TestEntsoePriceFetcherAsync()
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         "Downloads",
         $"{year:d4}{month:d2}.csv");
-    DateTime firstDay = new DateTime(year, month, 1, 0, 0, 0, 0, DateTimeKind.Local);
+    DateTime firstDay = (new DateTime(year, month, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
     DateTime day = firstDay;
     using (var fileWriter = new StreamWriter(targetFilePath))
     {
@@ -60,7 +57,11 @@ async Task TestEntsoePriceFetcherAsync()
         while (day.Month == firstDay.Month)
         {
             Console.WriteLine($"Fetching prices for {day}");
-            var prices = await priceFetcher.GetPricesAsync(day.ToUniversalTime(), CancellationToken.None);
+            var prices = await priceFetcher.GetPricesAsync(day.Year, day.Month, day.Day, CancellationToken.None);
+            if (prices.Length != 24)
+            {
+                Console.WriteLine($"WARNING: got {prices.Length} price points");
+            }
             foreach (ElectricityPrice price in prices)
             {
                 string line = $"{price.Time:o},{price.PriceEurocentPerMWh}";
