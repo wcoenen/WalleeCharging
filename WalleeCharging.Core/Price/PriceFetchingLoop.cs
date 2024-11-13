@@ -19,7 +19,7 @@ public class PriceFetchingLoop : BackgroundService
 
     private async Task FetchPricesIfMissingAsync(DateTime day, CancellationToken cancellationToken)
     {
-        if (await _database.GetPriceAsync(day) == null)
+        if (await _database.GetPriceAsync(day.ToUniversalTime()) == null)
         {
             try
             {
@@ -52,13 +52,13 @@ public class PriceFetchingLoop : BackgroundService
                 var today = now.Date;
 
                 // fetch today's prices (if we don't have them yet)
-                await FetchPricesIfMissingAsync(today.ToUniversalTime(), stoppingToken);
+                await FetchPricesIfMissingAsync(today, stoppingToken);
             
                 // fetch tomorrow's prices if they may be available by now (and we don't have them yet)
                 if (now.Hour >= 13 && now.Minute >= 10)
                 {
                     var tomorrow = today.AddDays(1);
-                    await FetchPricesIfMissingAsync(tomorrow.ToUniversalTime(), stoppingToken);
+                    await FetchPricesIfMissingAsync(tomorrow, stoppingToken);
                 }
 
                 // Check every 5 minutes whether there is something to do

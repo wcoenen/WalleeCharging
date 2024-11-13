@@ -52,7 +52,10 @@ else
 // Add other services to the container.
 builder.Services.AddRazorPages();
 builder.Services.AddSignalR();
-builder.Services.AddSingleton<IDatabase>(new SqliteDatabase(sqliteFilePath));
+builder.Services.AddSingleton<IDatabase>(x =>
+    new SqliteDatabase(
+        sqliteFilePath,
+        x.GetRequiredService<ILogger<SqliteDatabase>>()));
 builder.Services.AddSingleton<IPriceFetcher>(x => 
     new EntsoePriceFetcher(
         entsoeApiToken,

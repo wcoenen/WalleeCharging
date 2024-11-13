@@ -1,6 +1,5 @@
-﻿using System.Configuration;
-using System.Data.Common;
-using Microsoft.Data.Sqlite;
+﻿using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 using WalleeCharging.Price;
 
 namespace WalleeCharging.Database;
@@ -8,9 +7,14 @@ namespace WalleeCharging.Database;
 public class SqliteDatabase : IDatabase, IDisposable
 {
     private readonly SqliteConnection _connection;
+    private readonly ILogger<SqliteDatabase> _logger;
 
-    public SqliteDatabase(string databaseFilePath )
+    public SqliteDatabase(string databaseFilePath, ILogger<SqliteDatabase> logger)
     {
+        _logger = logger;
+
+        _logger.LogInformation("Opening sqlite database '{databaseFilePath}'", databaseFilePath);
+
         bool newDatabase = !File.Exists(databaseFilePath);
         
         string connectionString = $"Data Source={databaseFilePath}";
@@ -25,6 +29,7 @@ public class SqliteDatabase : IDatabase, IDisposable
 
     private void InitializeDatabaseSchema()
     {
+        _logger.LogInformation("Initializing new sqlite database");
         // Time is always stored as the number of seconds since 1970-01-01 00:00:00 UTC, aka "unix time".
 
         // Charging parameters. Currently only the newest record is used.
@@ -140,11 +145,19 @@ public class SqliteDatabase : IDatabase, IDisposable
         string sql ="INSERT INTO DayAheadPrice(UnixTime, PriceEurocentPerMWh) VALUES(@time,@price);";
         foreach (var price in prices)
         {
-            using (var command = new SqliteCommand(sql, _connection))
+            try
             {
-                command.Parameters.AddWithValue("time", DateTimeToUnix(price.Time));
-                command.Parameters.AddWithValue("price", price.PriceEurocentPerMWh);
-                await command.ExecuteNonQueryAsync();
+                using (var command = new SqliteCommand(sql, _connection))
+                {
+                    command.Parameters.AddWithValue("time", DateTimeToUnix(price.Time));
+                    command.Parameters.AddWithValue("price", price.PriceEurocentPerMWh);
+                    await command.ExecuteNonQueryAsync();
+                }
+            }
+            catch
+            {
+                _logger.LogError("Encountered an error while saving this price in DayAheadPrice table: {price}", price);
+                throw;
             }
         }
     }
