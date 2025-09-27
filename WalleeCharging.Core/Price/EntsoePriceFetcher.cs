@@ -17,6 +17,7 @@ public class EntsoePriceFetcher : IPriceFetcher
     private readonly string URL_TEMPLATE = 
     "https://web-api.tp.entsoe.eu/api?"
         +"securityToken={0}&documentType=A44&in_Domain={1}&out_Domain={1}&periodStart={2}&periodEnd={3}";
+    private readonly TimeSpan QUARTER_HOUR = TimeSpan.FromMinutes(15);
     
     private readonly string _apiKey;
     private readonly HttpClient _httpClient;
@@ -71,12 +72,12 @@ public class EntsoePriceFetcher : IPriceFetcher
             // So we have little choice but to accept any namespace.
             string namespaceName = xdoc.Root.Name.Namespace.NamespaceName;
 
-            // Check that there is only one time resolution in the response, and it is PT60M.
+            // Check that there is only one time resolution in the response, and it is PT15M.
             var resolutionElementName = XName.Get("resolution", namespaceName);
             string timeResolution = xdoc.Descendants(resolutionElementName).Single().Value;
-            if (timeResolution != "PT60M")
+            if (timeResolution != "PT15M")
             {
-                throw new InvalidDataException($"Expected time resolution 'PT60M' in response from entso.eu API but got '{timeResolution}'");
+                throw new InvalidDataException($"Expected time resolution 'PT15M' in response from entso.eu API but got '{timeResolution}'");
             }
 
             // Get the time interval from the response.
@@ -101,15 +102,12 @@ public class EntsoePriceFetcher : IPriceFetcher
             // with the position representing the exact time in the requested time range.
             //
             // To calculate the time when a price takes effect, we subtract one from the position
-            // (to turn it into a proper zero-based offset) and then add that number of hours to the
+            // (to turn it into a proper zero-based offset) and then add that number of quarter-hours to the
             // start of the requested range.
             //
             // Unfortunately, it seems that the API can omit positions if the price doesn't change.
             // For example, if position 23 is missing, then the price of position 22 is in effect
-            // for more than one hour. Trying to fill in such holes would be complicated by the fact that
-            // there are days with only 23 hours for summer to winter daylight saving transitions,
-            // so it may not be obvious whether position 24 is actually missing or just doesn't exist.
-            // So we do not attempt to fill in these holes; we just return the prices provided by the API.
+            // for more than one quarter-hour. We fill in such holes.
             //
             // <Point>
             //        <position>1</position>
@@ -147,11 +145,11 @@ public class EntsoePriceFetcher : IPriceFetcher
                 }
 
                 // Check for non-consecutive "position" values and fill in the holes in the data.
-                // We do this by just adding one hour to the previous price point and copying the price.
+                // We do this by just adding one quarter-hour to the previous price point and copying the price.
                 while (position != (previousPosition + 1))
                 {
                     lastPricePoint = pricePointList[pricePointList.Count - 1];
-                    pricePointList.Add(new ElectricityPrice(lastPricePoint.Time.AddHours(1), lastPricePoint.PriceEurocentPerMWh));
+                    pricePointList.Add(new ElectricityPrice(lastPricePoint.Time.Add(QUARTER_HOUR), lastPricePoint.PriceEurocentPerMWh));
                     previousPosition++;
                 }
 
@@ -164,7 +162,7 @@ public class EntsoePriceFetcher : IPriceFetcher
                 decimal priceEuroMWh = decimal.Parse(priceElement.Value, NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
                 int priceEurocentMWh = (int)(priceEuroMWh * 100);
                 int offset = position - 1;
-                var pointDateTime = startTime.AddHours(offset);
+                var pointDateTime = startTime.Add(offset*QUARTER_HOUR);
                 pricePointList.Add(new ElectricityPrice(pointDateTime, priceEurocentMWh));
 
                 previousPosition++;
@@ -172,9 +170,9 @@ public class EntsoePriceFetcher : IPriceFetcher
 
             // Check for missing data after the last price point, and fill it in if necessary.
             lastPricePoint = pricePointList[pricePointList.Count - 1];
-            while (lastPricePoint.Time.AddHours(1) < endTime)
+            while (lastPricePoint.Time.Add(QUARTER_HOUR) < endTime)
             {
-                pricePointList.Add(new ElectricityPrice(lastPricePoint.Time.AddHours(1), lastPricePoint.PriceEurocentPerMWh));
+                pricePointList.Add(new ElectricityPrice(lastPricePoint.Time.Add(QUARTER_HOUR), lastPricePoint.PriceEurocentPerMWh));
                 lastPricePoint = pricePointList[pricePointList.Count - 1];
             }
          

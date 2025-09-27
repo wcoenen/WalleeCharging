@@ -1,5 +1,6 @@
 ﻿@page
 @using WalleeCharging.Price
+@using System.Globalization
 @model IndexModel
 @{
     ViewData["Title"] = "Home page";
@@ -39,17 +40,12 @@ const prices = [
   }
 ]
 
-const timezoneOffsetHours = Math.floor((new Date()).getTimezoneOffset() / 60);
 const labels = [
     @foreach (var price in Model.Prices)
     {
-      <text>((@(price.Time.Hour) - timezoneOffsetHours) % 24),</text>
+      <text>new Date('@(price.Time.ToString("o", CultureInfo.InvariantCulture))'),</text>
     }
 ]
-if (labels.length > 0)
-{
-    labels[0] = 'now';
-}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="/js/price-chart.js"></script>

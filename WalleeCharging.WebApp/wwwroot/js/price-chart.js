@@ -12,9 +12,22 @@ const chart = new Chart(ctx, {
   options: {
       events: ['click'],
       scales: {
-          y: {
-          beginAtZero: true
+        x: {
+          ticks: {
+            callback: function(value, index, ticks) {
+              const date = new Date(this.getLabelForValue(value));
+              // Format as YYYY-MM-DD HH:mm
+              return date.toLocaleString('en-GB', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+              }).replace(',', '');
+            }
           }
+        },
+        y: {
+        beginAtZero: true
+        }
       }
   }
 });
