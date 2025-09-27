@@ -62,7 +62,7 @@ public class PriceFetchingLoop : BackgroundService
                 }
 
                 // Check every 5 minutes whether there is something to do
-                await Task.Delay(5*60*1000, stoppingToken);
+                await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
             }
         }
         catch (TaskCanceledException e)

@@ -15,6 +15,7 @@ public class P1MeterDataProvider : IMeterDataProvider, IAsyncDisposable
     //      measurementValue = "002.52"
     //      measurementUnit = "A"
     private static readonly string _regex = @"(?<obisCode>[\d\.:\-]+)\((?<measurementValue>[^*\)]+)\*(?<measurementUnit>[^\)]+)\)";
+    private static readonly int SLEEP_TIME_MS = 200;
     private readonly ILogger<P1MeterDataProvider> _logger;
     private readonly object _lock = new object();
     private readonly CancellationTokenSource _stoppingTokenSource = new CancellationTokenSource();
@@ -42,7 +43,7 @@ public class P1MeterDataProvider : IMeterDataProvider, IAsyncDisposable
             {
                 try
                 {
-                    int size = await ReadP1Telegram(serialPort.BaseStream, buffer);
+                    int size = await ReadP1Telegram(serialPort, buffer);
                     MeterData meterData = ParseP1Telegram(buffer, size);
                     _logger.LogTrace($"P1 telegram: {meterData}");
                     ProvideMeterData(meterData);
@@ -107,12 +108,20 @@ public class P1MeterDataProvider : IMeterDataProvider, IAsyncDisposable
         }
     }
 
-    private async Task<int> ReadP1Telegram(Stream stream, byte[] buffer)
+    private async Task<int> ReadP1Telegram(SerialPort serialPort, byte[] buffer)
     {
+        var stream = serialPort.BaseStream;
+
         // zero out buffer
-        for (int i=0; i<buffer.Length; i++)
+        for (int i = 0; i < buffer.Length; i++)
         {
             buffer[i] = 0x00;
+        }
+
+        // wait for bytes to arive
+        while (serialPort.BytesToRead == 0)
+        {
+            await Task.Delay(SLEEP_TIME_MS);
         }
 
         // Read byte by byte until we find the start marker '/'
@@ -129,8 +138,11 @@ public class P1MeterDataProvider : IMeterDataProvider, IAsyncDisposable
             }
             if (bytesRead == 0)
             {
-                // avoid CPU spinning while waiting for data
-                await Task.Delay(50);
+                // wait for bytes to arive
+                while (serialPort.BytesToRead == 0)
+                {
+                    await Task.Delay(SLEEP_TIME_MS);
+                }
             }
         }
         int offset = 1;
@@ -154,8 +166,11 @@ public class P1MeterDataProvider : IMeterDataProvider, IAsyncDisposable
             }
             if (bytesRead == 0)
             {
-                // avoid CPU spinning while waiting for data
-                await Task.Delay(50);
+                // wait for bytes to arive
+                while (serialPort.BytesToRead == 0)
+                {
+                    await Task.Delay(SLEEP_TIME_MS);
+                }
             }
             else
             {
