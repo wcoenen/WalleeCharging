@@ -31,29 +31,5 @@
 <script src="~/js/signalr/dist/browser/signalr.js"></script>
 <script src="~/js/signalr-subscriber.js"></script>
 
-<!-- price chart -->
-<script>
-const prices = [
-  @foreach (ElectricityPrice price in Model.Prices)
-  {
-      <text>@(price.PriceEurocentPerMWh),</text>
-  }
-]
-
-const labels = [
-    @foreach (var price in Model.Prices)
-    {
-      <text>new Date('@(price.Time.ToString("o", CultureInfo.InvariantCulture))'),</text>
-    }
-]
-</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="/js/price-chart.js"></script>
-<script>
-highlightBarsWithPriceEqualOrBelow(@(Model.ChargingParameters.MaxPriceEurocentPerMWh))
-
-document.getElementById('maxPriceEurocentPerMWh').addEventListener("change", function() {
-  const currentMaxPrice = document.getElementById('maxPriceEurocentPerMWh').value;
-  highlightBarsWithPriceEqualOrBelow(currentMaxPrice);
-});
-</script>

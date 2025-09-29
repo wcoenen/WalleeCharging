@@ -55,6 +55,7 @@ try
 
     // Add other services to the container.
     builder.Services.AddRazorPages();
+    builder.Services.AddControllers();
     builder.Services.AddSignalR();
     builder.Services.AddSingleton<IDatabase>(x =>
         new SqliteDatabase(
@@ -104,6 +105,7 @@ try
     app.UseAuthorization();
 
     app.MapRazorPages();
+    app.MapControllers();
 
     // see also WalleeCharging.WebApp/wwwroot/js/signalr-subscriber.js
     app.MapHub<SignalRHub>("/signalr");
