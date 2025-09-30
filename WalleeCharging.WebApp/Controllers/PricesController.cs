@@ -7,14 +7,11 @@ namespace WalleeCharging.WebApp;
 [Route("api/prices")]
 public class PricesController
 {
-    private readonly ILogger<PricesController> _logger;
     private readonly IDatabase _database;
     
-    public PricesController(ILogger<PricesController> logger, IDatabase database)
+    public PricesController(IDatabase database)
     {
-        _logger = logger;
         _database = database;
-        _logger.LogInformation("PricesController created");
     }
 
     [HttpGet]
