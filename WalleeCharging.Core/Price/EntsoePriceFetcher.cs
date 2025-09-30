@@ -47,12 +47,11 @@ public class EntsoePriceFetcher : IPriceFetcher
             HttpUtility.UrlEncode(periodStartText),
             HttpUtility.UrlEncode(periodStartText));
 
+        string? responseText = null;
         try
         {
             var response = await _httpClient.GetAsync(url, cancellationToken);
-            string responseText = await response.Content.ReadAsStringAsync();
-            var logLevel = response.StatusCode == HttpStatusCode.OK ? LogLevel.Debug : LogLevel.Error;
-            _logger.Log(logLevel, "Response from entso.eu api: {response}", responseText);
+            responseText = await response.Content.ReadAsStringAsync();
             response.EnsureSuccessStatusCode();
 
             var xdoc = XDocument.Parse(responseText);
@@ -113,7 +112,7 @@ public class EntsoePriceFetcher : IPriceFetcher
             //        <position>1</position>
             //        <price.amount>74.33</price.amount>
             // </Point>
-            
+
             var pointElementName = XName.Get("Point", namespaceName);
             var positionElementName = XName.Get("position", namespaceName);
             var priceElementName = XName.Get("price.amount", namespaceName);
@@ -130,7 +129,7 @@ public class EntsoePriceFetcher : IPriceFetcher
                     throw new InvalidDataException("entso.eu API response has a 'Point' point without a 'position'.");
                 }
                 int position = Int32.Parse(positionElement.Value);
-                              
+
                 // Check for holes in the data at the start, these cannot be filled.
                 if (previousPosition == 0 && position != 1)
                 {
@@ -162,7 +161,7 @@ public class EntsoePriceFetcher : IPriceFetcher
                 decimal priceEuroMWh = decimal.Parse(priceElement.Value, NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
                 int priceEurocentMWh = (int)(priceEuroMWh * 100);
                 int offset = position - 1;
-                var pointDateTime = startTime.Add(offset*QUARTER_HOUR);
+                var pointDateTime = startTime.Add(offset * QUARTER_HOUR);
                 pricePointList.Add(new ElectricityPrice(pointDateTime, priceEurocentMWh));
 
                 previousPosition++;
@@ -175,11 +174,14 @@ public class EntsoePriceFetcher : IPriceFetcher
                 pricePointList.Add(new ElectricityPrice(lastPricePoint.Time.Add(QUARTER_HOUR), lastPricePoint.PriceEurocentPerMWh));
                 lastPricePoint = pricePointList[pricePointList.Count - 1];
             }
-         
+
+            _logger.Log(LogLevel.Debug, "Successfully parsed this response from entso.eu api: {response}", responseText);
+
             return pricePointList.ToArray();
         }
         catch (HttpRequestException e)
         {
+            _logger.Log(LogLevel.Error, "Content of non-success response from entso.eu api: {response}", responseText);
             throw new PriceFetcherException("HTTP request to entso.eu API failed.", e);
         }
         catch (TaskCanceledException e)
@@ -188,6 +190,7 @@ public class EntsoePriceFetcher : IPriceFetcher
         }
         catch (Exception e) when (e is XmlException || e is FormatException || e is InvalidDataException || e is InvalidOperationException)
         {
+            _logger.Log(LogLevel.Error, "Unparsed content of response from entso.eu api: {response}", responseText);
             throw new PriceFetcherException("HTTP request to entso.eu API returned unexpected data", e);
         }
 
