@@ -1,7 +1,28 @@
-var initializedChart;
+var currentChart;
 
 // initialize chart
 getPricepointsAndPopulateChart();
+
+// Schedule chart refresh at the start of every quarter-hour
+function scheduleQuarterHourRefresh() {
+  const now = new Date();
+  const minutes = now.getMinutes();
+  const seconds = now.getSeconds();
+  const ms = now.getMilliseconds();
+  // Calculate ms until next quarter-hour (0, 15, 30, 45)
+  const nextQuarter = 15 * Math.ceil((minutes + 1) / 15);
+  const nextQuarterMinutes = nextQuarter === 60 ? 0 : nextQuarter;
+  const addHour = nextQuarter === 60 ? 1 : 0;
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() + addHour, nextQuarterMinutes, 0, 0);
+  const delay = next - now;
+  setTimeout(() => {
+    getPricepointsAndPopulateChart();
+    // After first run, refresh every 15 minutes
+    setInterval(getPricepointsAndPopulateChart, 15 * 60 * 1000);
+  }, delay);
+}
+
+scheduleQuarterHourRefresh();
 
 // chart reacts to changes in max price input field
 document.getElementById('maxPriceEurocentPerMWh').addEventListener("change", updateHighlightedBars);
@@ -28,6 +49,10 @@ function PopulateChart(pricePoints)
   const labels = pricePoints.map(pricePoint=>new Date(pricePoint.time));
   const prices = pricePoints.map(pricePoint=>pricePoint.priceEurocentPerMWh);
   const ctx = document.getElementById('priceChart');
+  if (currentChart) {
+    currentChart.destroy();
+    currentChart = null;
+  }
   const chart = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -59,7 +84,7 @@ function PopulateChart(pricePoints)
         }
     }
   });
-  initializedChart = chart;
+  currentChart = chart;
   chart.prices = prices // attach prices to chart for later reference in clickHandler
   chart.canvas.onclick = clickHandler;
   updateHighlightedBars();
@@ -67,8 +92,8 @@ function PopulateChart(pricePoints)
 
 function clickHandler(click)
 {
-  const points = initializedChart.getElementsAtEventForMode(click, 'nearest', {intersect: true}, true);
-  const clickedPrice = initializedChart.prices[points[0].index];
+  const points = currentChart.getElementsAtEventForMode(click, 'nearest', {intersect: true}, true);
+  const clickedPrice = currentChart.prices[points[0].index];
 
   // set max price textbox
   document.getElementById('maxPriceEurocentPerMWh').setAttribute('value', clickedPrice);
@@ -79,12 +104,12 @@ function clickHandler(click)
 
 function highlightBarsWithPriceEqualOrBelow(selectedPrice) {
     // this clears off any tooltip highlights
-    initializedChart.update();
-    initializedChart.activeElements = [];
+    currentChart.update();
+    currentChart.activeElements = [];
 
     var backgroundColors = [];
-    for (var i=0; i<initializedChart.prices.length; i++) {
-        if (initializedChart.prices[i] <= selectedPrice)
+    for (var i=0; i<currentChart.prices.length; i++) {
+        if (currentChart.prices[i] <= selectedPrice)
         {
             backgroundColors.push('#9ad0f5');
         }
@@ -94,8 +119,8 @@ function highlightBarsWithPriceEqualOrBelow(selectedPrice) {
         }
     }
   
-    var dataset = initializedChart.data.datasets[0];
+    var dataset = currentChart.data.datasets[0];
     dataset.backgroundColor = backgroundColors;
-    initializedChart.update();
+    currentChart.update();
 }
 
