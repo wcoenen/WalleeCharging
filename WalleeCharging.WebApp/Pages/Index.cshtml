@@ -12,9 +12,23 @@
         <label>Max meter power [watts]</label>
         <input type="number" name="maxTotalPowerWatts" value="@Model.ChargingParameters.MaxTotalPowerWatts"> 
     </div>
+
     <div>
         <label>Max day-ahead price [eurocent/MWh]</label>
-        <input id="maxPriceEurocentPerMWh" type="number" name="maxPriceEurocentPerMWh" value="@Model.ChargingParameters.MaxPriceEurocentPerMWh"> 
+        <input id="maxPriceEurocentPerMWh" type="number" name="maxPriceEurocentPerMWh" value="@Model.ChargingParameters.MaxPriceEurocentPerMWh">
+        <div style="margin-left:2em; margin-top:0.5em;">
+            <div>
+                <input type="button" value="-" onclick="decreaseMaxPrice()">
+                <input type="button" value="+" onclick="increaseMaxPrice()">
+            </div>
+            <div>
+                <input type="button" value="minimum" onclick="setMaxPriceToPercentile(0)">
+                <input type="button" value="lower 10%" onclick="setMaxPriceToPercentile(.1)">
+                <input type="button" value="lower 20%" onclick="setMaxPriceToPercentile(.2)">
+                <input type="button" value="median" onclick="setMaxPriceToPercentile(.5)">
+                <input type="button" value="maximum" onclick="setMaxPriceToPercentile(1)">
+            </div>
+        </div>
     </div>
     <div>
         <input type="submit">
