@@ -1,5 +1,4 @@
 var initializedChart;
-var initializedPrices;
 
 // initialize chart
 getPricepointsAndPopulateChart();
@@ -12,18 +11,22 @@ function updateHighlightedBars() {
   highlightBarsWithPriceEqualOrBelow(currentMaxPrice);
 }
 
-function getPricepointsAndPopulateChart()
+async function getPricepointsAndPopulateChart()
 {
-  fetch('/api/prices')
-    .then(response => response.json())
-    .then(pricePoints => PopulateChart(pricePoints));
+  try {
+    const response = await fetch('/api/prices');
+    const pricePoints = await response.json();
+    PopulateChart(pricePoints);
+  }
+  catch (error) {
+    console.error('Error fetching price points:', error);
+  }
 }
 
 function PopulateChart(pricePoints)
 {
   const labels = pricePoints.map(pricePoint=>new Date(pricePoint.time));
   const prices = pricePoints.map(pricePoint=>pricePoint.priceEurocentPerMWh);
-  initializedPrices = prices;
   const ctx = document.getElementById('priceChart');
   const chart = new Chart(ctx, {
     type: 'bar',
@@ -57,6 +60,7 @@ function PopulateChart(pricePoints)
     }
   });
   initializedChart = chart;
+  chart.prices = prices // attach prices to chart for later reference in clickHandler
   chart.canvas.onclick = clickHandler;
   updateHighlightedBars();
 }
@@ -64,7 +68,7 @@ function PopulateChart(pricePoints)
 function clickHandler(click)
 {
   const points = initializedChart.getElementsAtEventForMode(click, 'nearest', {intersect: true}, true);
-  const clickedPrice = initializedPrices[points[0].index];
+  const clickedPrice = initializedChart.prices[points[0].index];
 
   // set max price textbox
   document.getElementById('maxPriceEurocentPerMWh').setAttribute('value', clickedPrice);
@@ -79,8 +83,8 @@ function highlightBarsWithPriceEqualOrBelow(selectedPrice) {
     initializedChart.activeElements = [];
 
     var backgroundColors = [];
-    for (var i=0; i<initializedPrices.length; i++) {
-        if (initializedPrices[i] <= selectedPrice)
+    for (var i=0; i<initializedChart.prices.length; i++) {
+        if (initializedChart.prices[i] <= selectedPrice)
         {
             backgroundColors.push('#9ad0f5');
         }
@@ -93,5 +97,5 @@ function highlightBarsWithPriceEqualOrBelow(selectedPrice) {
     var dataset = initializedChart.data.datasets[0];
     dataset.backgroundColor = backgroundColors;
     initializedChart.update();
-  }
+}
 
