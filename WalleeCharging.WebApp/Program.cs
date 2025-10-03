@@ -37,18 +37,18 @@ try
     config.AddEnvironmentVariables();
 
     // Add meter data source to the container.
-    // both a serial port connection to the P1 port, and the HTTP API of the HomeWizard P1 meter are supported.
+    // Both a serial port connection to the P1 port, and the HTTP API of the HomeWizard P1 meter are supported.
     //
     // If both are configured the HomeWizard API is preferred.
     // This makes it easier to debug on a dev machine which is not directly connected to a P1 port.
     // In that context, appsettings.Development.json and appsettings.json will be merged, possibly
     // causing both sections to be present.
-    if (config.GetSection("HomeWizard") != null)
+    if (config.GetSection("HomeWizard").Exists())
     {
         builder.Services.Configure<HomeWizardOptions>(config.GetSection("HomeWizard"));
         builder.Services.AddSingleton<IMeterDataProvider, HomeWizardMeterDataProvider>();
     }
-    else if (config.GetSection("P1Meter") != null)
+    else if (config.GetSection("P1Meter").Exists())
     {
         builder.Services.Configure<P1MeterOptions>(config.GetSection("P1Meter"));
         builder.Services.AddSingleton<IMeterDataProvider, P1MeterDataProvider>();
