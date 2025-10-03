@@ -14,7 +14,7 @@ namespace WalleeCharging.Price;
 
 public class EntsoePriceFetcher : IPriceFetcher
 {
-    private readonly string DOMAIN = "10YBE----------2";
+    private readonly string _domain;
     private readonly string URL_TEMPLATE = 
     "https://web-api.tp.entsoe.eu/api?"
         +"securityToken={0}&documentType=A44&in_Domain={1}&out_Domain={1}&periodStart={2}&periodEnd={3}";
@@ -27,6 +27,7 @@ public class EntsoePriceFetcher : IPriceFetcher
     public EntsoePriceFetcher(IOptions<EntsoeOptions> options, ILogger<EntsoePriceFetcher> logger)
     {
         _apiKey = options.Value.ApiKey ?? throw new ArgumentException("ENTSOE ApiKey is not configured");
+        _domain = options.Value.Domain ?? throw new ArgumentException("ENTSOE Domain is not configured");
         _logger = logger;
         _httpClient = new HttpClient();
     }
@@ -44,7 +45,7 @@ public class EntsoePriceFetcher : IPriceFetcher
         string url = string.Format(
             URL_TEMPLATE,
             HttpUtility.UrlEncode(_apiKey),
-            HttpUtility.UrlEncode(DOMAIN),
+            HttpUtility.UrlEncode(_domain),
             HttpUtility.UrlEncode(periodStartText),
             HttpUtility.UrlEncode(periodStartText));
 
