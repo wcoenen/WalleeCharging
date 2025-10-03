@@ -93,7 +93,7 @@ public class SqliteDatabase : IDatabase, IDisposable
             throw new ArgumentException("DateTimeKind must be UTC");
 
         string sql = "SELECT UnixTime, PriceEurocentPerMWh"
-            + " FROM DayAheadPrice WHERE UnixTime <= @unixTime ORDER BY UnixTime ASC LIMIT 1";
+            + " FROM DayAheadPrice WHERE UnixTime <= @unixTime ORDER BY UnixTime DESC LIMIT 1";
         using (var command = new SqliteCommand(sql, _connection))
         {
             command.Parameters.AddWithValue("unixTime", DateTimeToUnix(time));
