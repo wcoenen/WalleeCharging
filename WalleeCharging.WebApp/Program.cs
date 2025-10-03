@@ -73,17 +73,9 @@ try
     );
 
     // ControlLoop background worker
-    builder.Services.AddHostedService<ControlLoop>(x => 
-        new ControlLoop(
-            loopDelayMillis: loopDelayMillis,
-            maxSafeCurrentAmpere: maxSafeCurrentAmpere,
-            shadowMode: shadowMode,
-            x.GetRequiredService<IDatabase>(),
-            x.GetRequiredService<IMeterDataProvider>(),
-            x.GetRequiredService<IChargingStation>(),
-            x.GetRequiredService<INotificationSink>(),
-            x.GetRequiredService<ILogger<ControlLoop>>())
-    );
+    builder.Services.Configure<ControlLoopOptions>(config.GetSection("ControlLoop"));
+    builder.Services.AddHostedService<ControlLoop>();
+
     // PriceFetchingLoop background worker
     builder.Services.AddHostedService<PriceFetchingLoop>();
 

@@ -4,6 +4,7 @@ using WalleeCharging.Meter;
 using WalleeCharging.Price;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 namespace WalleeCharging.Control;
 
@@ -19,9 +20,7 @@ public class ControlLoop : BackgroundService
     private readonly bool _shadowMode;
 
     public ControlLoop(
-        int loopDelayMillis,
-        int maxSafeCurrentAmpere,
-        bool shadowMode,
+        IOptions<ControlLoopOptions> options,
         IDatabase database,
         IMeterDataProvider meterDataProvider,
         IChargingStation chargingStation,
@@ -29,9 +28,9 @@ public class ControlLoop : BackgroundService
         ILogger<ControlLoop> logger)
     {
         // settings
-        _loopDelayMillis = loopDelayMillis;
-        _maxSafeCurrentAmpere = maxSafeCurrentAmpere;
-        _shadowMode = shadowMode;
+        _loopDelayMillis = options.Value.LoopDelayMillis;
+        _maxSafeCurrentAmpere = options.Value.MaxSafeCurrentAmpere;
+        _shadowMode = options.Value.ShadowMode;
 
         // services
         _database = database;
