@@ -90,13 +90,11 @@ public class SqliteDatabase : IDatabase, IDisposable
         if (time.Kind != DateTimeKind.Utc)
             throw new ArgumentException("DateTimeKind must be UTC");
 
-        DateTime hourTime = new DateTime(time.Year, time.Month, time.Day, time.Hour, 0, 0, DateTimeKind.Utc);
-
         string sql = "SELECT UnixTime, PriceEurocentPerMWh"
-            +" FROM DayAheadPrice WHERE UnixTime = @unixTime";
+            + " FROM DayAheadPrice WHERE UnixTime >= @unixTime ORDER BY UnixTime ASC LIMIT 1";
         using (var command = new SqliteCommand(sql, _connection))
         {
-            command.Parameters.AddWithValue("unixTime", DateTimeToUnix(hourTime));
+            command.Parameters.AddWithValue("unixTime", DateTimeToUnix(time));
             var reader = await command.ExecuteReaderAsync();
             if (reader.HasRows)
             {
