@@ -1,5 +1,6 @@
 ﻿using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using WalleeCharging.Price;
 
 namespace WalleeCharging.Database;
@@ -9,8 +10,9 @@ public class SqliteDatabase : IDatabase, IDisposable
     private readonly SqliteConnection _connection;
     private readonly ILogger<SqliteDatabase> _logger;
 
-    public SqliteDatabase(string databaseFilePath, ILogger<SqliteDatabase> logger)
+    public SqliteDatabase(IOptions<SqliteDatabaseOptions> options, ILogger<SqliteDatabase> logger)
     {
+        string databaseFilePath = options.Value.DatabaseFilePath ?? throw new ArgumentException("Sqlite DatabaseFilePath is not configured");
         _logger = logger;
 
         _logger.LogInformation("Opening sqlite database '{databaseFilePath}'", databaseFilePath);

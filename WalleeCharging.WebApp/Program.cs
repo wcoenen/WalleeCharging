@@ -62,14 +62,11 @@ try
     builder.Services.AddRazorPages();
     builder.Services.AddControllers();
     builder.Services.AddSignalR();
-    builder.Services.AddSingleton<IDatabase>(x =>
-        new SqliteDatabase(
-            sqliteFilePath,
-            x.GetRequiredService<ILogger<SqliteDatabase>>()));
-
-
-
     builder.Services.AddSingleton<INotificationSink,SignalRNotificationSink>();
+
+    // Sqlite database
+    builder.Services.Configure<SqliteDatabaseOptions>(config.GetSection("Sqlite"));
+    builder.Services.AddSingleton<IDatabase,SqliteDatabase>();
 
     // Price fetching via Entsoe
     builder.Services.Configure<EntsoeOptions>(config.GetSection("ENTSOE"));
