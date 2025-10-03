@@ -3,6 +3,7 @@ using System.IO.Ports;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using WalleeCharging.Meter;
 
 public class P1MeterDataProvider : IMeterDataProvider, IAsyncDisposable
@@ -15,14 +16,17 @@ public class P1MeterDataProvider : IMeterDataProvider, IAsyncDisposable
     //      measurementValue = "002.52"
     //      measurementUnit = "A"
     private static readonly string _regex = @"(?<obisCode>[\d\.:\-]+)\((?<measurementValue>[^*\)]+)\*(?<measurementUnit>[^\)]+)\)";
+
+    private readonly string _serialPortDevice;
     private readonly ILogger<P1MeterDataProvider> _logger;
     private readonly object _lock = new object();
     private readonly CancellationTokenSource _stoppingTokenSource = new CancellationTokenSource();
     private readonly Task _serialPortReader;
     private TaskCompletionSource<MeterData>? _taskCompletionSource;
 
-    public P1MeterDataProvider(ILogger<P1MeterDataProvider> logger)
+    public P1MeterDataProvider(IOptions<P1MeterOptions> options, ILogger<P1MeterDataProvider> logger)
     {
+        _serialPortDevice = options.Value.SerialPortDevice ?? throw new ArgumentException("P1Meter SerialPortDevice is not configured");
         _logger = logger;
         _serialPortReader = StartSerialPortReader();
     }
@@ -31,7 +35,7 @@ public class P1MeterDataProvider : IMeterDataProvider, IAsyncDisposable
     {
         using (var serialPort = new SerialPort())
         {
-            serialPort.PortName = "/dev/ttyUSB0";
+            serialPort.PortName = _serialPortDevice;
             serialPort.BaudRate = 115200;
             serialPort.Handshake = Handshake.XOnXOff;
             serialPort.ReadTimeout = 1; // set to a very low value so we know when the buffer is empty

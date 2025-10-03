@@ -8,6 +8,7 @@ using WalleeCharging.WebApp;
 using Serilog;
 using System.Configuration;
 using System.Diagnostics;
+using Microsoft.VisualBasic;
 
 // Bootstrap logger for startup issues
 Log.Logger = new LoggerConfiguration()
@@ -34,21 +35,27 @@ try
     // Configuration values
     var config = builder.Configuration;
     config.AddEnvironmentVariables();
-    string meterDataSource =    config.GetRequiredValue<string>("MeterDataSource");
 
-    // add meter data source to the container
-    if (meterDataSource == "P1")
-    {
-        builder.Services.AddSingleton<IMeterDataProvider,P1MeterDataProvider>();
-    }
-    else if (meterDataSource == "HomeWizard")
+    // Add meter data source to the container.
+    // both a serial port connection to the P1 port, and the HTTP API of the HomeWizard P1 meter are supported.
+    //
+    // If both are configured the HomeWizard API is preferred.
+    // This makes it easier to debug on a dev machine which is not directly connected to a P1 port.
+    // In that context, appsettings.Development.json and appsettings.json will be merged, possibly
+    // causing both sections to be present.
+    if (config.GetSection("HomeWizard") != null)
     {
         builder.Services.Configure<HomeWizardOptions>(config.GetSection("HomeWizard"));
         builder.Services.AddSingleton<IMeterDataProvider, HomeWizardMeterDataProvider>();
     }
+    else if (config.GetSection("P1Meter") != null)
+    {
+        builder.Services.Configure<P1MeterOptions>(config.GetSection("P1Meter"));
+        builder.Services.AddSingleton<IMeterDataProvider, P1MeterDataProvider>();
+    }
     else
     {
-        throw new ConfigurationErrorsException("Unknown MeterDataSource '{meterDataSource}'");
+        throw new ConfigurationErrorsException("No P1Meter or HomeWizard configuration found. Please configure one of these meter data sources.");
     }
 
     // Add other services to the container.
