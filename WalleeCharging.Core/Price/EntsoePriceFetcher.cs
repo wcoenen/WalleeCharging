@@ -8,6 +8,7 @@ using System.Xml;
 using System.Xml.Linq;
 using System.Xml.XPath;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace WalleeCharging.Price;
 
@@ -23,9 +24,9 @@ public class EntsoePriceFetcher : IPriceFetcher
     private readonly HttpClient _httpClient;
     private readonly ILogger _logger;
 
-    public EntsoePriceFetcher(string apiKey, ILogger<EntsoePriceFetcher> logger)
+    public EntsoePriceFetcher(IOptions<EntsoeOptions> options, ILogger<EntsoePriceFetcher> logger)
     {
-        _apiKey = apiKey;
+        _apiKey = options.Value.ApiKey ?? throw new ArgumentException("ENTSOE ApiKey is not configured");
         _logger = logger;
         _httpClient = new HttpClient();
     }

@@ -7,6 +7,7 @@ using WalleeCharging.WebApp.Services;
 using WalleeCharging.WebApp;
 using Serilog;
 using System.Configuration;
+using System.Diagnostics;
 
 // Bootstrap logger for startup issues
 Log.Logger = new LoggerConfiguration()
@@ -16,6 +17,11 @@ Log.Logger = new LoggerConfiguration()
 try
 {
     var builder = WebApplication.CreateBuilder(args);
+    if (builder.Environment.IsDevelopment())
+    {
+        // The ENTSOE API key can be stored in the user secrets under the name "ENTSOE:ApiKey"
+        builder.Configuration.AddUserSecrets<Program>();
+    }
 
     // paths
     string sqliteFilePath = Path.Combine(
@@ -28,7 +34,6 @@ try
     // Configuration values
     var config = builder.Configuration;
     config.AddEnvironmentVariables();
-    string entsoeApiToken =     config.GetRequiredValue("EntsoeApiKey");
     string meterDataSource =    config.GetRequiredValue<string>("MeterDataSource");
 
     // add meter data source to the container
@@ -54,11 +59,14 @@ try
         new SqliteDatabase(
             sqliteFilePath,
             x.GetRequiredService<ILogger<SqliteDatabase>>()));
-    builder.Services.AddSingleton<IPriceFetcher>(x => 
-        new EntsoePriceFetcher(
-            entsoeApiToken,
-            x.GetRequiredService<ILogger<EntsoePriceFetcher>>()));
+
+
+
     builder.Services.AddSingleton<INotificationSink,SignalRNotificationSink>();
+
+    // Price fetching via Entsoe
+    builder.Services.Configure<EntsoeOptions>(config.GetSection("ENTSOE"));
+    builder.Services.AddSingleton<IPriceFetcher, EntsoePriceFetcher>();
 
     // Alfen Eve charging station via modbus TCP
     builder.Services.Configure<AlfenEveOptions>(config.GetSection("AlfenEve"));
