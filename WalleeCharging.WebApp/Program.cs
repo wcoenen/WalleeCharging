@@ -38,11 +38,8 @@ try
     }
     else if (meterDataSource == "HomeWizard")
     {
-        string homeWizardUrl = config.GetRequiredValue("HomeWizardApiUrl");
-        builder.Services.AddSingleton<IMeterDataProvider>(x =>
-            new HomeWizardMeterDataProvider(
-                homeWizardUrl,
-                x.GetRequiredService<ILogger<HomeWizardMeterDataProvider>>()));
+        builder.Services.Configure<HomeWizardOptions>(config.GetSection("HomeWizard"));
+        builder.Services.AddSingleton<IMeterDataProvider, HomeWizardMeterDataProvider>();
     }
     else
     {

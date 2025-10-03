@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using Microsoft.CSharp.RuntimeBinder;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 
 namespace WalleeCharging.Meter;
@@ -13,9 +14,9 @@ public class HomeWizardMeterDataProvider : IMeterDataProvider, IDisposable
     private readonly Stopwatch _stopwatch;
 
 
-    public HomeWizardMeterDataProvider(string url, ILogger<HomeWizardMeterDataProvider> logger)
+    public HomeWizardMeterDataProvider(IOptions<HomeWizardOptions> options, ILogger<HomeWizardMeterDataProvider> logger)
     {
-        _url = url;
+        _url = options.Value.ApiUrl ?? throw new ArgumentException("HomeWizard ApiUrl is not configured");
         _logger = logger;
         _httpClient = new HttpClient();
         _stopwatch = new Stopwatch();

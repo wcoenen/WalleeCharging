@@ -41,15 +41,10 @@ public class AlfenEveModbusChargingStation : IChargingStation, IDisposable
 
     public AlfenEveModbusChargingStation(IOptions<AlfenEveOptions> options, ILogger<AlfenEveModbusChargingStation> logger)
     {
-        string? hostname = options.Value.Hostname;
-        if (hostname == null)
-            throw new ArgumentException("AlfenEve Hostname is not configured");
-
-        _hostname = hostname;
-        
+        _hostname = options.Value.Hostname ?? throw new ArgumentException("AlfenEve Hostname is not configured");
         _logger = logger;
-        _stopWatch = new Stopwatch();
 
+        _stopWatch = new Stopwatch();
         _modbusFactory = new ModbusFactory();
         _tcpClient = new TcpClient(_hostname, PORT);
         _modbusMaster = _modbusFactory.CreateMaster(_tcpClient);
