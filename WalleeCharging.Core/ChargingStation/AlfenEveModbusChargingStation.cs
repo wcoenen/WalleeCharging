@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NModbus;
 using NModbus.Utility;
 
@@ -38,8 +39,12 @@ public class AlfenEveModbusChargingStation : IChargingStation, IDisposable
     private TcpClient _tcpClient;
     private IModbusMaster _modbusMaster;
 
-    public AlfenEveModbusChargingStation(string hostname, ILogger<AlfenEveModbusChargingStation> logger)
+    public AlfenEveModbusChargingStation(IOptions<AlfenEveOptions> options, ILogger<AlfenEveModbusChargingStation> logger)
     {
+        string? hostname = options.Value.Hostname;
+        if (hostname == null)
+            throw new ArgumentException("AlfenEve Hostname is not configured");
+
         _hostname = hostname;
         
         _logger = logger;

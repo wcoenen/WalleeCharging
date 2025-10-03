@@ -28,11 +28,7 @@ try
     // Configuration values
     var config = builder.Configuration;
     config.AddEnvironmentVariables();
-    string alfenEveHostname =   config.GetRequiredValue("AlfenEveHostName");
     string entsoeApiToken =     config.GetRequiredValue("EntsoeApiKey");
-    int maxSafeCurrentAmpere =  config.GetRequiredValue<int>("MaxSafeCurrentAmpere");
-    int loopDelayMillis =       config.GetRequiredValue<int>("LoopDelayMillis");
-    bool shadowMode =           config.GetRequiredValue<bool>("ShadowMode");
     string meterDataSource =    config.GetRequiredValue<string>("MeterDataSource");
 
     // add meter data source to the container
@@ -66,11 +62,10 @@ try
             entsoeApiToken,
             x.GetRequiredService<ILogger<EntsoePriceFetcher>>()));
     builder.Services.AddSingleton<INotificationSink,SignalRNotificationSink>();
-    builder.Services.AddSingleton<IChargingStation>(x =>
-        new AlfenEveModbusChargingStation(
-            alfenEveHostname,
-            x.GetRequiredService<ILogger<AlfenEveModbusChargingStation>>())
-    );
+
+    // Alfen Eve charging station via modbus TCP
+    builder.Services.Configure<AlfenEveOptions>(config.GetSection("AlfenEve"));
+    builder.Services.AddSingleton<IChargingStation, AlfenEveModbusChargingStation>();
 
     // ControlLoop background worker
     builder.Services.Configure<ControlLoopOptions>(config.GetSection("ControlLoop"));
