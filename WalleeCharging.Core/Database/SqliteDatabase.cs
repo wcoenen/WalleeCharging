@@ -35,12 +35,14 @@ public class SqliteDatabase : IDatabase, IDisposable
         // Time is always stored as the number of seconds since 1970-01-01 00:00:00 UTC, aka "unix time".
 
         // Charging parameters. Currently only the newest record is used.
-        // (Possible future usecases for multiple records: restoring old settings, or settings that take effect at a certain time.)
+        // (Possible future use cases for multiple records: restoring old settings, or settings that take effect at a certain time.)
         ExecuteNonQuery("CREATE TABLE ChargingParameters "
             + "(UnixTime INTEGER PRIMARY KEY, MaxTotalPowerWatts INTEGER, MaxPriceEurocentPerMWh INTEGER)");
-        
+
         // Price points for the day-ahead market for electricity.
-        ExecuteNonQuery("CREATE TABLE DayAheadPrice (UnixTime INTEGER PRIMARY KEY, PriceEurocentPerMWh INTEGER)");
+        // Because there has been a transition from 60-minute to 15-minute intervals, we don't make assumptions about interval length.
+        // Each price point has a start time (inclusive) and end time (exclusive).
+        ExecuteNonQuery("CREATE TABLE DayAheadPrice (StartUnixTime INTEGER, EndUnixTime INTEGER, PriceEurocentPerMWh INTEGER)");
     }
 
     private void ExecuteNonQuery(string sql)
@@ -92,8 +94,9 @@ public class SqliteDatabase : IDatabase, IDisposable
         if (time.Kind != DateTimeKind.Utc)
             throw new ArgumentException("DateTimeKind must be UTC");
 
-        string sql = "SELECT UnixTime, PriceEurocentPerMWh"
-            + " FROM DayAheadPrice WHERE UnixTime <= @unixTime ORDER BY UnixTime DESC LIMIT 1";
+        string sql = "SELECT StartUnixTime, EndUnixTime, PriceEurocentPerMWh"
+            + " FROM DayAheadPrice WHERE StartUnixTime <= @unixTime AND EndUnixTime > @unixTime"; 
+        
         using (var command = new SqliteCommand(sql, _connection))
         {
             command.Parameters.AddWithValue("unixTime", DateTimeToUnix(time));
@@ -101,9 +104,13 @@ public class SqliteDatabase : IDatabase, IDisposable
             if (reader.HasRows)
             {
                 await reader.ReadAsync();
-                return new ElectricityPrice(
+                var price = new ElectricityPrice(
                     UnixToDateTime(reader.GetInt64(0)),
-                    reader.GetInt32(1));
+                    UnixToDateTime(reader.GetInt64(1)),
+                    reader.GetInt32(2));
+                if (await reader.ReadAsync())
+                    throw new InvalidDataException($"Database integrity error: more than one price point found for the same time: {time:o}");
+                return price;
             }
             else
             {
@@ -112,6 +119,9 @@ public class SqliteDatabase : IDatabase, IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets all prices that are relevant within the given time interval, inclusive timeStart, exclusive timeEnd.
+    /// </summary>
     public async IAsyncEnumerable<ElectricityPrice> GetPricesAsync(DateTime timeStart, DateTime timeEnd)
     {
         if ((timeStart.Kind != DateTimeKind.Utc) || (timeEnd.Kind != DateTimeKind.Utc))
@@ -119,8 +129,13 @@ public class SqliteDatabase : IDatabase, IDisposable
             throw new ArgumentException("DateTimeKind must be UTC");
         }
 
-        string sql = "SELECT UnixTime, PriceEurocentPerMWh"
-            +" FROM DayAheadPrice WHERE UnixTime >= @startTime AND UnixTime <= @endTime";
+        _logger.LogDebug("querying prices from {timeStart} to {timeEnd}", timeStart, timeEnd);
+
+        string sql = "SELECT StartUnixTime, EndUnixTime, PriceEurocentPerMWh"
+            + " FROM DayAheadPrice"
+            + " WHERE (@startTime <= StartUnixTime AND  StartUnixTime < @endTime)"
+            + " OR (@startTime < EndUnixTime AND  EndUnixTime <= @endTime)"
+            + " ORDER BY StartUnixTime ASC";
 
         using (var command = new SqliteCommand(sql, _connection))
         {
@@ -134,7 +149,8 @@ public class SqliteDatabase : IDatabase, IDisposable
                 {
                     yield return new ElectricityPrice(
                         UnixToDateTime(reader.GetInt64(0)),
-                        reader.GetInt32(1));
+                        UnixToDateTime(reader.GetInt64(1)),
+                        reader.GetInt32(2));
                 }
             }
         }
@@ -142,14 +158,22 @@ public class SqliteDatabase : IDatabase, IDisposable
 
     public async Task SavePricesAsync(ElectricityPrice[] prices)
     {
-        string sql ="INSERT INTO DayAheadPrice(UnixTime, PriceEurocentPerMWh) VALUES(@time,@price);";
         foreach (var price in prices)
         {
+            // first check for conflicts
+            var conflictingPrice = await GetPricesAsync(price.StartTime, price.EndTime).FirstOrDefaultAsync();
+            if (conflictingPrice != null)
+            {
+                throw new ArgumentException($"Price '{price}' cannot be saved because it conflicts with an existing price: {conflictingPrice}");
+            }
+            // then save the price in the database
             try
             {
+                string sql ="INSERT INTO DayAheadPrice(StartUnixTime, EndUnixTime, PriceEurocentPerMWh) VALUES(@startTime, @endTime, @price);";
                 using (var command = new SqliteCommand(sql, _connection))
                 {
-                    command.Parameters.AddWithValue("time", DateTimeToUnix(price.Time));
+                    command.Parameters.AddWithValue("startTime", DateTimeToUnix(price.StartTime));
+                    command.Parameters.AddWithValue("endTime", DateTimeToUnix(price.EndTime));
                     command.Parameters.AddWithValue("price", price.PriceEurocentPerMWh);
                     await command.ExecuteNonQueryAsync();
                 }

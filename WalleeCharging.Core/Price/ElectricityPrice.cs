@@ -2,22 +2,45 @@ using System.Globalization;
 
 namespace WalleeCharging.Price;
 
+/// <summary>
+/// A price for electricity that is valid for a certain time interval.
+/// </summary>
 public class ElectricityPrice
 {
-    public ElectricityPrice(DateTime time, int priceEurocentPerMWh)
+    /// <summary>
+    /// Creates a new ElectricityPrice instance.
+    /// </summary>
+    public ElectricityPrice(DateTime startTime, DateTime endTime, int priceEurocentPerMWh)
     {
-        if (time.Kind != DateTimeKind.Utc)
-            throw new ArgumentException("DateTimeKind must be UTC");
+        if (startTime.Kind != DateTimeKind.Utc)
+            throw new ArgumentException("startTime.Kind must be DateTimeKind.UTC");
+        if (endTime.Kind != DateTimeKind.Utc)
+            throw new ArgumentException("endTime.Kind must be DateTimeKind.UTC");
+        if (endTime <= startTime)
+            throw new ArgumentException("endTime must be after startTime");
 
-        Time = time;
+        StartTime = startTime;
+        EndTime = endTime;
         PriceEurocentPerMWh = priceEurocentPerMWh;
     }
 
-    public DateTime Time { get; }
-    public int PriceEurocentPerMWh {get; }
+    /// <summary>
+    /// The start of the time interval when this price is in effect, inclusive.
+    /// </summary>
+    public DateTime StartTime { get; }
+
+    /// <summary>
+    /// The end of the time interval when this price is in effect, exclusive.
+    /// </summary>
+    public DateTime EndTime { get; }
+
+    /// <summary>
+    /// The price in Eurocent per MWh.
+    /// </summary>
+    public int PriceEurocentPerMWh { get; }
 
     public override string ToString()
     {
-        return $"Time={Time:o} Price={PriceEurocentPerMWh}";
+        return $"StartTime={StartTime:o} EndTime={EndTime:o} Price={PriceEurocentPerMWh}";
     }
 }

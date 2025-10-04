@@ -115,46 +115,22 @@ public class EntsoePriceFetcher : IPriceFetcher
             //        <price.amount>74.33</price.amount>
             // </Point>
 
-            var pointElementName = XName.Get("Point", namespaceName);
-            var positionElementName = XName.Get("position", namespaceName);
-            var priceElementName = XName.Get("price.amount", namespaceName);
-            var pointElements = xdoc.Descendants(pointElementName);
+            XName pointElementName = XName.Get("Point", namespaceName);
+            XName positionElementName = XName.Get("position", namespaceName);
+            XName priceElementName = XName.Get("price.amount", namespaceName);
+            List<XElement> pointElements = xdoc.Descendants(pointElementName).ToList();
             var pricePointList = new List<ElectricityPrice>();
-            int previousPosition = 0;
-            ElectricityPrice lastPricePoint;
 
-            foreach (var pointElement in pointElements)
+            for (int i = 0; i < pointElements.Count; i++)
             {
-                var positionElement = pointElement.Element(positionElementName);
+                // Get the position and price of this point.
+                XElement pointElement = pointElements[i];
+                XElement? positionElement = pointElement.Element(positionElementName);
                 if (positionElement == null)
                 {
                     throw new InvalidDataException("entso.eu API response has a 'Point' point without a 'position'.");
                 }
                 int position = Int32.Parse(positionElement.Value);
-
-                // Check for holes in the data at the start, these cannot be filled.
-                if (previousPosition == 0 && position != 1)
-                {
-                    throw new InvalidDataException("entso.eu API response does not start with a 'Point' at position 1");
-                }
-
-                // Check for improper order of the points.
-                // Should never happen, but we need to be careful to avoid an infinite loop below.
-                if (position < previousPosition)
-                {
-                    throw new InvalidDataException("entso.eu API response has a 'Point' point with a 'position' that indicates improper order.");
-                }
-
-                // Check for non-consecutive "position" values and fill in the holes in the data.
-                // We do this by just adding one quarter-hour to the previous price point and copying the price.
-                while (position != (previousPosition + 1))
-                {
-                    lastPricePoint = pricePointList[pricePointList.Count - 1];
-                    pricePointList.Add(new ElectricityPrice(lastPricePoint.Time.Add(QUARTER_HOUR), lastPricePoint.PriceEurocentPerMWh));
-                    previousPosition++;
-                }
-
-                // Add a price point for the current Point element
                 var priceElement = pointElement.Element(priceElementName);
                 if (priceElement == null)
                 {
@@ -162,23 +138,36 @@ public class EntsoePriceFetcher : IPriceFetcher
                 }
                 decimal priceEuroMWh = decimal.Parse(priceElement.Value, NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
                 int priceEurocentMWh = (int)(priceEuroMWh * 100);
-                int offset = position - 1;
-                var pointDateTime = startTime.Add(offset * QUARTER_HOUR);
-                pricePointList.Add(new ElectricityPrice(pointDateTime, priceEurocentMWh));
 
-                previousPosition++;
-            }
+                // Get the position of the next point, if any.
+                XElement? nextPointElement = (i < pointElements.Count - 1) ? pointElements[i + 1] : null;
+                XElement? nextPositionElement = nextPointElement?.Element(positionElementName);
+                int? nextPosition = (nextPositionElement != null) ? Int32.Parse(nextPositionElement.Value) : null;
 
-            // Check for missing data after the last price point, and fill it in if necessary.
-            lastPricePoint = pricePointList[pricePointList.Count - 1];
-            while (lastPricePoint.Time.Add(QUARTER_HOUR) < endTime)
-            {
-                pricePointList.Add(new ElectricityPrice(lastPricePoint.Time.Add(QUARTER_HOUR), lastPricePoint.PriceEurocentPerMWh));
-                lastPricePoint = pricePointList[pricePointList.Count - 1];
+                // Check for holes in the data at the start.
+                if (i== 0 && position != 1)
+                {
+                    throw new InvalidDataException("entso.eu API response does not start with a 'Point' at position 1");
+                }
+
+                // Check for improper order of the points.
+                if (nextPosition != null && nextPosition <= position)
+                {
+                    throw new InvalidDataException("entso.eu API response has a 'Point' point with a 'position' that indicates improper order.");
+                }
+
+                // Calculate the time when this price point takes effect.
+                // This is based on the overall startTime, point position and time resolution.
+                DateTime priceStartTime = startTime.Add((position - 1) * QUARTER_HOUR);
+
+                // The price is in effect until the next price point, or the end of the requested range if there is no next point.
+                // It is not guarantueed that the next point is one quarter-hour later. Not all positions are required to be present.
+                DateTime priceEndTime = (nextPosition != null) ? startTime.Add((nextPosition.Value - 1) * QUARTER_HOUR) : endTime;
+
+                pricePointList.Add(new ElectricityPrice(priceStartTime, priceEndTime, priceEurocentMWh));
             }
 
             _logger.Log(LogLevel.Debug, "Successfully parsed this response from entso.eu api: {response}", responseText);
-
             return pricePointList.ToArray();
         }
         catch (HttpRequestException e)

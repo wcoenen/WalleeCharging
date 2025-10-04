@@ -46,7 +46,7 @@ async function getPricepointsAndPopulateChart()
 
 function PopulateChart(pricePoints)
 {
-  const labels = pricePoints.map(pricePoint=>new Date(pricePoint.time));
+  const labels = pricePoints.map(pricePoint=>new Date(pricePoint.startTime));
   const prices = pricePoints.map(pricePoint=>pricePoint.priceEurocentPerMWh);
   const ctx = document.getElementById('priceChart');
   if (currentChart) {
