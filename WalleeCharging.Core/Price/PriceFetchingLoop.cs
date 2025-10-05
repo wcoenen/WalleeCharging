@@ -55,7 +55,7 @@ public class PriceFetchingLoop : BackgroundService
                 await FetchPricesIfMissingAsync(today, stoppingToken);
             
                 // fetch tomorrow's prices if they may be available by now (and we don't have them yet)
-                if (now.Hour >= 13 && now.Minute >= 10)
+                if (now.Hour > 13 || (now.Hour == 13 && now.Minute >= 10))
                 {
                     var tomorrow = today.AddDays(1);
                     await FetchPricesIfMissingAsync(tomorrow, stoppingToken);
