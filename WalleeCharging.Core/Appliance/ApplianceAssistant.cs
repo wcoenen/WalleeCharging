@@ -5,11 +5,13 @@ using WalleeCharging.Price;
 public class ApplianceAssistant
 {
     private readonly ApplianceProfile[] _profiles;
+    private readonly ElectricityContractOptions _contractOptions;
     private readonly IDatabase _database;
 
-    public ApplianceAssistant(IOptions<ApplianceAssistantOptions> options, IDatabase database)
+    public ApplianceAssistant(IOptions<ApplianceAssistantOptions> applianceOptions, IOptions<ElectricityContractOptions> contractOptions,  IDatabase database)
     {
-        _profiles = options.Value.Profiles;
+        _profiles = applianceOptions.Value.Profiles;
+        _contractOptions = contractOptions.Value;
         _database = database;
     }
 
@@ -23,7 +25,7 @@ public class ApplianceAssistant
         }
     }
 
-    private static ApplianceHint GetApplianceHint(ApplianceProfile profile, ElectricityPrice[] prices)
+    private ApplianceHint GetApplianceHint(ApplianceProfile profile, ElectricityPrice[] prices)
     {
         // Find the best matching start time for this profile.
         // We do this by checking each possible start time in the price data,
@@ -33,7 +35,7 @@ public class ApplianceAssistant
         for (int i = 0; i < prices.Length; i++)
         {
             DateTime startTime = prices[i].StartTime;
-            decimal totalCost = 0;
+            decimal totalCostEuro = 0;
             decimal totalConsumptionKwh = 0;
             bool profileFits = (prices.Length - i) >= profile.ConsumptionKwhPer15min.Length;
             if (!profileFits)
@@ -42,12 +44,16 @@ public class ApplianceAssistant
             }
             for (int j = 0; j < profile.ConsumptionKwhPer15min.Length; j++)
             {
-                totalCost += profile.ConsumptionKwhPer15min[j] * prices[i + j].PriceEurocentPerMWh / 100_000; // convert from eurocent per MWh to euro per kWh
+                // dvivide price by 100,000 to convert from eurocent per MWh to euro per kWh
+                decimal dayAheadPriceEuroPerKWh = prices[i + j].PriceEurocentPerMWh / 100_000M;
+                // calculate effective price, which will be higher than day-ahead price due to various taxes and fees
+                decimal priceEuroPerkWh = ((dayAheadPriceEuroPerKWh * _contractOptions.FactorAppliedtoDayAheadPrice) + _contractOptions.ConstantAddedEuroPerkWh) * _contractOptions.VATMultiplier;
+                totalCostEuro += profile.ConsumptionKwhPer15min[j] * priceEuroPerkWh;
                 totalConsumptionKwh += profile.ConsumptionKwhPer15min[j];
             }
-            if (lowestCost == null || totalCost < lowestCost)
+            if (lowestCost == null || totalCostEuro < lowestCost)
             {
-                lowestCost = totalCost;
+                lowestCost = totalCostEuro;
                 optimalStartTime = startTime;
             }
         }

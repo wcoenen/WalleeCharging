@@ -85,6 +85,7 @@ try
 
     // Appliance assistant
     builder.Services.Configure<ApplianceAssistantOptions>(config.GetSection("ApplianceAssistant"));
+    builder.Services.Configure<ElectricityContractOptions>(config.GetSection("ElectricityContract"));
     builder.Services.AddSingleton<ApplianceAssistant>();
 
     var app = builder.Build();
