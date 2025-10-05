@@ -83,6 +83,10 @@ try
     // PriceFetchingLoop background worker
     builder.Services.AddHostedService<PriceFetchingLoop>();
 
+    // Appliance assistant
+    builder.Services.Configure<ApplianceAssistantOptions>(config.GetSection("ApplianceAssistant"));
+    builder.Services.AddSingleton<ApplianceAssistant>();
+
     var app = builder.Build();
 
     // Configure the HTTP request pipeline.
