@@ -160,9 +160,9 @@ public class EntsoePriceFetcher : IPriceFetcher
                 // This is based on the overall startTime, point position and time resolution.
                 DateTime priceStartTime = startTime.Add((position - 1) * QUARTER_HOUR);
 
-                // The price is in effect until the next price point, or the end of the requested range if there is no next point.
+                // The price is in effect until the next price point, or for 15 minutes if there is no next point.
                 // It is not guarantueed that the next point is one quarter-hour later. Not all positions are required to be present.
-                DateTime priceEndTime = (nextPosition != null) ? startTime.Add((nextPosition.Value - 1) * QUARTER_HOUR) : endTime;
+                DateTime priceEndTime = (nextPosition != null) ? startTime.Add((nextPosition.Value - 1) * QUARTER_HOUR) : priceStartTime.Add(QUARTER_HOUR);
 
                 pricePointList.Add(new ElectricityPrice(priceStartTime, priceEndTime, priceEurocentMWh));
             }
