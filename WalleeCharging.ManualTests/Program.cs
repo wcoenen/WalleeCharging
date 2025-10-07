@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using WalleeCharging.Price;
 using WalleeCharging.ManualTests;
 using System.Text;
+using Microsoft.Extensions.Options;
 
 Console.WriteLine("[1] EntsoePriceFetcher");
 Console.WriteLine("[2] P1PortReader");
@@ -42,7 +43,13 @@ async Task TestEntsoePriceFetcherAsync()
         .Build();
     string entsoeApiToken = config["EntsoeApiKey"] ?? throw new ConfigurationErrorsException("missing EntsoeApiKey");
 
-    var priceFetcher = new EntsoePriceFetcher(entsoeApiToken, new ConsoleLogger<EntsoePriceFetcher>());
+    var options = Options.Create(
+        new EntsoeOptions()
+        {
+            ApiKey = entsoeApiToken,
+            Domain = "10YBE----------2"
+        });
+    var priceFetcher = new EntsoePriceFetcher(options, new ConsoleLogger<EntsoePriceFetcher>());
 
     // Get prices
     string targetFilePath = Path.Combine(
@@ -64,7 +71,7 @@ async Task TestEntsoePriceFetcherAsync()
             }
             foreach (ElectricityPrice price in prices)
             {
-                string line = $"{price.Time:o},{price.PriceEurocentPerMWh}";
+                string line = $"{price.StartTime:o},{price.PriceEurocentPerMWh}";
                 Console.WriteLine(line);
                 fileWriter.WriteLine(line);
             }
@@ -78,7 +85,12 @@ async Task TestEntsoePriceFetcherAsync()
 async Task TestP1PortReaderAsync()
 {
     var logger = new ConsoleLogger<P1MeterDataProvider>();
-    await using (var meterDataProvider = new P1MeterDataProvider(logger))
+    var options = Options.Create(
+        new P1MeterOptions()
+        {
+            SerialPortDevice = "/dev/ttyUSB0"
+        });
+    await using (var meterDataProvider = new P1MeterDataProvider(options, logger))
     {
         while (true)
         {
