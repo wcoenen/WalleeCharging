@@ -10,15 +10,22 @@ function scheduleQuarterHourRefresh() {
   const seconds = now.getSeconds();
   const ms = now.getMilliseconds();
   // Calculate ms until next quarter-hour (0, 15, 30, 45)
-  const nextQuarter = 15 * Math.ceil((minutes + 1) / 15);
-  const nextQuarterMinutes = nextQuarter === 60 ? 0 : nextQuarter;
-  const addHour = nextQuarter === 60 ? 1 : 0;
-  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() + addHour, nextQuarterMinutes, 0, 0);
-  const delay = next - now;
+  var minutesToWait;
+  if (minutes < 15) {
+    minutesToWait = 15-minutes;
+  } else if (minutes < 30) {
+    minutesToWait = 30-minutes;
+  } else if (minutes < 45) {
+    minutesToWait = 45-minutes;
+  } else {
+    minutesToWait = 60-minutes;
+  }
+  const delay = (minutesToWait * 60 * 1000) - (seconds * 1000) - ms;
+  console.log(`Scheduling next price chart refresh in ${delay} ms`);
   setTimeout(() => {
+    console.log("Refreshing price chart at quarter hour");
     getPricepointsAndPopulateChart();
-    // After first run, refresh every 15 minutes
-    setInterval(getPricepointsAndPopulateChart, 15 * 60 * 1000);
+    scheduleQuarterHourRefresh();
   }, delay);
 }
 
@@ -35,7 +42,11 @@ function updateHighlightedBars() {
 async function getPricepointsAndPopulateChart()
 {
   try {
-    const response = await fetch('/api/prices');
+    const start = new Date(); // now
+    const end = new Date(start.getTime() + 36*60*60*1000); // now + 36 hours
+    const startIsoUrlEncoded = encodeURIComponent(start.toISOString());
+    const endIsoUrlEncoded = encodeURIComponent(end.toISOString());
+    const response = await fetch('/api/prices?start=' + startIsoUrlEncoded + '&end=' + endIsoUrlEncoded);
     const pricePoints = await response.json();
     PopulateChart(pricePoints);
   }

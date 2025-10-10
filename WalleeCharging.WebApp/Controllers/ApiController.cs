@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 using WalleeCharging.Database;
 using WalleeCharging.Price;
 namespace WalleeCharging.WebApp;
@@ -17,13 +18,23 @@ public class ApiController
 
     [HttpGet]
     [Route("api/prices")]
-    public IAsyncEnumerable<ElectricityPrice> Get()
+    public IAsyncEnumerable<ElectricityPrice> Get(DateTime? start, DateTime? end)
     {
-        DateTime now = DateTime.UtcNow;
-        // round down to the start of the current quarter-hour
-        DateTime currentQuarterHour = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute - (now.Minute % 15), 0, DateTimeKind.Utc);
-        DateTime endTomorrowUtc = DateTime.Today.AddDays(2).ToUniversalTime();
-        return _database.GetPricesAsync(currentQuarterHour, endTomorrowUtc);
+        if (start.HasValue && start.Value.Kind != DateTimeKind.Utc)
+        {
+            throw new ArgumentException("start time must be in UTC", nameof(start));
+        }
+
+        if (end.HasValue && end.Value.Kind != DateTimeKind.Utc)
+        {
+            throw new ArgumentException("end time must be in UTC", nameof(end));
+        }
+
+        // default values if start or end are not provided
+        start ??= DateTime.UtcNow;
+        end ??= start.Value.AddHours(36);
+
+        return _database.GetPricesAsync(start.Value, end.Value);
     }
     
     [HttpGet]
