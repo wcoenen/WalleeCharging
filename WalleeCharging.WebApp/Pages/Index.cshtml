@@ -23,8 +23,8 @@
             </div>
             <div>
                 <input type="button" value="minimum" onclick="setMaxPriceToPercentile(0)">
-                <input type="button" value="lower 10%" onclick="setMaxPriceToPercentile(.1)">
-                <input type="button" value="lower 20%" onclick="setMaxPriceToPercentile(.2)">
+                <input type="button" value="lowest 10%" onclick="setMaxPriceToPercentile(.1)">
+                <input type="button" value="lowest 20%" onclick="setMaxPriceToPercentile(.2)">
                 <input type="button" value="median" onclick="setMaxPriceToPercentile(.5)">
                 <input type="button" value="maximum" onclick="setMaxPriceToPercentile(1)">
             </div>
@@ -47,10 +47,12 @@ Optimal start times and expected cost (including various taxes and fees added to
 <ul id="activityList">
 </ul>
 
-<script src="~/js/signalr/dist/browser/signalr.js"></script>
-<script src="~/js/signalr-subscriber.js"></script>
+<script src="~/js/index.charging-parameters.js" asp-append-version="true"></script>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="/js/price-chart.js"></script>
+<script src="~/js/index.price-chart.js" asp-append-version="true"></script>
 
-<script src="/js/applianceHints.js"></script>
+<script src="~/js/index.appliance-hints.js" asp-append-version="true"></script>
+
+<script src="~/js/signalr/dist/browser/signalr.js" asp-append-version="true"></script>
+<script src="~/js/index.signalr-subscriber.js" asp-append-version="true"></script>
