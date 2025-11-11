@@ -26,7 +26,7 @@ else {
     }
 }
 
-$publishFolder=(Join-Path $PSScriptRoot '\bin\Release\net8.0\publish')
+$publishFolder=(Join-Path $PSScriptRoot '\bin\Release\net10.0\publish')
 
 # dotnet publish seems to keep old files around, so let's clean them first
 if (Test-Path $publishFolder)
