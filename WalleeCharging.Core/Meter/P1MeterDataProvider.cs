@@ -1,5 +1,5 @@
 using System;
-using System.IO.Ports;
+using Mono.IO.Ports;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
@@ -33,7 +33,7 @@ public class P1MeterDataProvider : IMeterDataProvider, IAsyncDisposable
 
     private async Task StartSerialPortReader()
     {
-        using (var serialPort = new SerialPort())
+        using (SerialPort serialPort = new SerialPort())
         {
             serialPort.PortName = _serialPortDevice;
             serialPort.BaudRate = 115200;
@@ -46,7 +46,7 @@ public class P1MeterDataProvider : IMeterDataProvider, IAsyncDisposable
             {
                 try
                 {
-                    int size = await ReadP1Telegram(serialPort.BaseStream, buffer);
+                    int size = await ReadP1Telegram(serialPort.BaseStream!, buffer);
                     MeterData meterData = ParseP1Telegram(buffer, size);
                     _logger.LogTrace($"P1 telegram: {meterData}");
                     ProvideMeterData(meterData);
