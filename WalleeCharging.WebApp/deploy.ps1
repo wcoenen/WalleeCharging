@@ -1,7 +1,7 @@
 # Deploy WalleeCharging.WebApp to a remote Linux system via SSH/SCP.
 $ErrorActionPreference="Stop"
 
-$deployConfig = "$PSScriptRoot\deploy.json"
+$deployConfig = "$PSScriptRoot\.deploy.json"
 if (Test-Path $deployConfig)
 {
     $config = Get-Content $deployConfig | ConvertFrom-Json

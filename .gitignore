@@ -3,4 +3,4 @@ bin
 .vscode
 *.sqlite
 *.log
-deploy.json
+.deploy.json
