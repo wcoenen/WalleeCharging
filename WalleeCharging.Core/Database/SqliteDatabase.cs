@@ -5,9 +5,9 @@ using WalleeCharging.Price;
 
 namespace WalleeCharging.Database;
 
-public class SqliteDatabase : IDatabase, IDisposable
+public class SqliteDatabase : IDatabase
 {
-    private readonly SqliteConnection _connection;
+    private readonly string _connectionString;
     private readonly ILogger<SqliteDatabase> _logger;
 
     public SqliteDatabase(IOptions<SqliteDatabaseOptions> options, ILogger<SqliteDatabase> logger)
@@ -19,9 +19,7 @@ public class SqliteDatabase : IDatabase, IDisposable
 
         bool newDatabase = !File.Exists(databaseFilePath);
         
-        string connectionString = $"Data Source={databaseFilePath}";
-        _connection = new SqliteConnection(connectionString);
-        _connection.Open();
+        _connectionString = $"Data Source={databaseFilePath}";
 
         if (newDatabase)
         {
@@ -47,9 +45,13 @@ public class SqliteDatabase : IDatabase, IDisposable
 
     private void ExecuteNonQuery(string sql)
     {
-        using (var command = new SqliteCommand(sql, _connection))
+        using (var connection = new SqliteConnection(_connectionString))
         {
-            command.ExecuteNonQuery();
+            connection.Open();
+            using (var command = new SqliteCommand(sql, connection))
+            {
+                command.ExecuteNonQuery();
+            }
         }
     }
 
@@ -57,21 +59,25 @@ public class SqliteDatabase : IDatabase, IDisposable
     {
         string sql = "SELECT UnixTime, MaxTotalPowerWatts, MaxPriceEurocentPerMWh"
             +" FROM ChargingParameters ORDER BY UnixTime DESC LIMIT 1;";
-        using (var command = new SqliteCommand(sql, _connection))
+        using (var connection = new SqliteConnection(_connectionString))
         {
-            var reader = await command.ExecuteReaderAsync();
-            if (reader.HasRows)
+            connection.Open();
+            using (var command = new SqliteCommand(sql, connection))
             {
-                await reader.ReadAsync();
-                return new ChargingControlParameters()
+                var reader = await command.ExecuteReaderAsync();
+                if (reader.HasRows)
                 {
-                    MaxTotalPowerWatts = reader.GetInt32(1),
-                    MaxPriceEurocentPerMWh = reader.GetInt32(2),
-                };
-            }
-            else
-            {
-                return new ChargingControlParameters();
+                    await reader.ReadAsync();
+                    return new ChargingControlParameters()
+                    {
+                        MaxTotalPowerWatts = reader.GetInt32(1),
+                        MaxPriceEurocentPerMWh = reader.GetInt32(2),
+                    };
+                }
+                else
+                {
+                    return new ChargingControlParameters();
+                }
             }
         }
     }
@@ -80,12 +86,16 @@ public class SqliteDatabase : IDatabase, IDisposable
     {
         string sql ="INSERT INTO ChargingParameters(UnixTime, MaxTotalPowerWatts, MaxPriceEurocentPerMWh) "
             +"VALUES(@time,@power,@price);";
-        using (var command = new SqliteCommand(sql, _connection))
+        using (var connection = new SqliteConnection(_connectionString))
         {
-            command.Parameters.AddWithValue("time", DateTimeOffset.UtcNow.ToUnixTimeSeconds());
-            command.Parameters.AddWithValue("power", chargingParameters.MaxTotalPowerWatts);
-            command.Parameters.AddWithValue("price", chargingParameters.MaxPriceEurocentPerMWh);
-            await command.ExecuteNonQueryAsync();
+            connection.Open();
+            using (var command = new SqliteCommand(sql, connection))
+            {
+                command.Parameters.AddWithValue("time", DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+                command.Parameters.AddWithValue("power", chargingParameters.MaxTotalPowerWatts);
+                command.Parameters.AddWithValue("price", chargingParameters.MaxPriceEurocentPerMWh);
+                await command.ExecuteNonQueryAsync();
+            }
         }
     }
 
@@ -97,24 +107,28 @@ public class SqliteDatabase : IDatabase, IDisposable
         string sql = "SELECT StartUnixTime, EndUnixTime, PriceEurocentPerMWh"
             + " FROM DayAheadPrice WHERE StartUnixTime <= @unixTime AND EndUnixTime > @unixTime"; 
         
-        using (var command = new SqliteCommand(sql, _connection))
+        using (var connection = new SqliteConnection(_connectionString))
         {
-            command.Parameters.AddWithValue("unixTime", DateTimeToUnix(time));
-            var reader = await command.ExecuteReaderAsync();
-            if (reader.HasRows)
+            connection.Open();
+            using (var command = new SqliteCommand(sql, connection))
             {
-                await reader.ReadAsync();
-                var price = new ElectricityPrice(
-                    UnixToDateTime(reader.GetInt64(0)),
-                    UnixToDateTime(reader.GetInt64(1)),
-                    reader.GetInt32(2));
-                if (await reader.ReadAsync())
-                    throw new InvalidDataException($"Database integrity error: more than one price point found for the same time: {time:o}");
-                return price;
-            }
-            else
-            {
-                return null;
+                command.Parameters.AddWithValue("unixTime", DateTimeToUnix(time));
+                var reader = await command.ExecuteReaderAsync();
+                if (reader.HasRows)
+                {
+                    await reader.ReadAsync();
+                    var price = new ElectricityPrice(
+                        UnixToDateTime(reader.GetInt64(0)),
+                        UnixToDateTime(reader.GetInt64(1)),
+                        reader.GetInt32(2));
+                    if (await reader.ReadAsync())
+                        throw new InvalidDataException($"Database integrity error: more than one price point found for the same time: {time:o}");
+                    return price;
+                }
+                else
+                {
+                    return null;
+                }
             }
         }
     }
@@ -137,20 +151,24 @@ public class SqliteDatabase : IDatabase, IDisposable
             + " OR (@startTime < EndUnixTime AND  EndUnixTime <= @endTime)"
             + " ORDER BY StartUnixTime ASC";
 
-        using (var command = new SqliteCommand(sql, _connection))
+        using (var connection = new SqliteConnection(_connectionString))
         {
-            command.Parameters.AddWithValue("startTime", DateTimeToUnix(timeStart));
-            command.Parameters.AddWithValue("endTime", DateTimeToUnix(timeEnd));
-            var reader = await command.ExecuteReaderAsync();
-            var results = new List<ElectricityPrice>();
-            if (reader.HasRows)
+            connection.Open();
+            using (var command = new SqliteCommand(sql, connection))
             {
-                while (await reader.ReadAsync())
+                command.Parameters.AddWithValue("startTime", DateTimeToUnix(timeStart));
+                command.Parameters.AddWithValue("endTime", DateTimeToUnix(timeEnd));
+                var reader = await command.ExecuteReaderAsync();
+                var results = new List<ElectricityPrice>();
+                if (reader.HasRows)
                 {
-                    yield return new ElectricityPrice(
-                        UnixToDateTime(reader.GetInt64(0)),
-                        UnixToDateTime(reader.GetInt64(1)),
-                        reader.GetInt32(2));
+                    while (await reader.ReadAsync())
+                    {
+                        yield return new ElectricityPrice(
+                            UnixToDateTime(reader.GetInt64(0)),
+                            UnixToDateTime(reader.GetInt64(1)),
+                            reader.GetInt32(2));
+                    }
                 }
             }
         }
@@ -170,12 +188,16 @@ public class SqliteDatabase : IDatabase, IDisposable
             try
             {
                 string sql ="INSERT INTO DayAheadPrice(StartUnixTime, EndUnixTime, PriceEurocentPerMWh) VALUES(@startTime, @endTime, @price);";
-                using (var command = new SqliteCommand(sql, _connection))
+                using (var connection = new SqliteConnection(_connectionString))
                 {
-                    command.Parameters.AddWithValue("startTime", DateTimeToUnix(price.StartTime));
-                    command.Parameters.AddWithValue("endTime", DateTimeToUnix(price.EndTime));
-                    command.Parameters.AddWithValue("price", price.PriceEurocentPerMWh);
-                    await command.ExecuteNonQueryAsync();
+                    connection.Open();
+                    using (var command = new SqliteCommand(sql, connection))
+                    {
+                        command.Parameters.AddWithValue("startTime", DateTimeToUnix(price.StartTime));
+                        command.Parameters.AddWithValue("endTime", DateTimeToUnix(price.EndTime));
+                        command.Parameters.AddWithValue("price", price.PriceEurocentPerMWh);
+                        await command.ExecuteNonQueryAsync();
+                    }
                 }
             }
             catch
@@ -194,10 +216,5 @@ public class SqliteDatabase : IDatabase, IDisposable
     private DateTime UnixToDateTime(long unixTime)
     {
         return DateTime.UnixEpoch.AddTicks(unixTime*TimeSpan.TicksPerSecond);
-    }
-
-    public void Dispose()
-    {
-        _connection.Dispose();
     }
 }
