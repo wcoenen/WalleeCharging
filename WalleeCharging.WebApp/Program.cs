@@ -78,7 +78,7 @@ try
 
     // Charging policies
     builder.Services.AddSingleton<IChargingPolicy, PricePolicy>();
-    builder.Services.AddSingleton<IChargingPolicy, WireCapacityPolicy>();
+    builder.Services.AddSingleton<IChargingPolicy, SafeCurrentPolicy>();
     builder.Services.AddSingleton<IChargingPolicy, CapacityTariffPolicy>();
 
     // ControlLoop background worker

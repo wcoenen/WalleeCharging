@@ -5,14 +5,14 @@ using WalleeCharging.Meter;
 
 namespace WalleeCharging.Control;
 
-public class WireCapacityPolicy : IChargingPolicy
+public class SafeCurrentPolicy : IChargingPolicy
 {
     private readonly int _maxSafeCurrentAmpere;
-    private readonly ILogger<WireCapacityPolicy> _logger;
+    private readonly ILogger<SafeCurrentPolicy> _logger;
 
-    public WireCapacityPolicy(
+    public SafeCurrentPolicy(
         IOptions<ControlLoopOptions> options,
-        ILogger<WireCapacityPolicy> logger)
+        ILogger<SafeCurrentPolicy> logger)
     {
         _maxSafeCurrentAmpere = options.Value.MaxSafeCurrentAmpere;
         _logger = logger;
