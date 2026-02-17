@@ -5,14 +5,14 @@ using WalleeCharging.Meter;
 
 namespace WalleeCharging.Control;
 
-public class CapacityTariffPolicy : IChargingPolicy
+public class MaxMeterPowerPolicy : IChargingPolicy
 {
     private readonly IDatabase _database;
-    private readonly ILogger<CapacityTariffPolicy> _logger;
+    private readonly ILogger<MaxMeterPowerPolicy> _logger;
 
-    public CapacityTariffPolicy(
+    public MaxMeterPowerPolicy(
         IDatabase database,
-        ILogger<CapacityTariffPolicy> logger)
+        ILogger<MaxMeterPowerPolicy> logger)
     {
         _database = database;
         _logger = logger;

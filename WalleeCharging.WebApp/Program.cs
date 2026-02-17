@@ -79,7 +79,7 @@ try
     // Charging policies
     builder.Services.AddSingleton<IChargingPolicy, PricePolicy>();
     builder.Services.AddSingleton<IChargingPolicy, SafeCurrentPolicy>();
-    builder.Services.AddSingleton<IChargingPolicy, CapacityTariffPolicy>();
+    builder.Services.AddSingleton<IChargingPolicy, MaxMeterPowerPolicy>();
 
     // ControlLoop background worker
     builder.Services.Configure<ControlLoopOptions>(config.GetSection("ControlLoop"));
