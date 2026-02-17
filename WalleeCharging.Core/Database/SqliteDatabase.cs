@@ -32,10 +32,9 @@ public class SqliteDatabase : IDatabase
         _logger.LogInformation("Initializing new sqlite database");
         // Time is always stored as the number of seconds since 1970-01-01 00:00:00 UTC, aka "unix time".
 
-        // Charging parameters. Currently only the newest record is used.
-        // (Possible future use cases for multiple records: restoring old settings, or settings that take effect at a certain time.)
-        ExecuteNonQuery("CREATE TABLE ChargingParameters "
-            + "(UnixTime INTEGER PRIMARY KEY, MaxTotalPowerWatts INTEGER, MaxPriceEurocentPerMWh INTEGER)");
+        // Integer parameters stored as name-value pairs.
+        ExecuteNonQuery("CREATE TABLE IntParameters "
+            + "(Name TEXT PRIMARY KEY, Value INTEGER)");
 
         // Price points for the day-ahead market for electricity.
         // Because there has been a transition from 60-minute to 15-minute intervals, we don't make assumptions about interval length.
@@ -57,43 +56,53 @@ public class SqliteDatabase : IDatabase
 
     public async Task<ChargingControlParameters> GetChargingParametersAsync()
     {
-        string sql = "SELECT UnixTime, MaxTotalPowerWatts, MaxPriceEurocentPerMWh"
-            +" FROM ChargingParameters ORDER BY UnixTime DESC LIMIT 1;";
+        string sql = "SELECT Name, Value FROM IntParameters WHERE Name IN (@param1, @param2)";
         using (var connection = new SqliteConnection(_connectionString))
         {
             connection.Open();
             using (var command = new SqliteCommand(sql, connection))
             {
+                command.Parameters.AddWithValue("param1", "MaxTotalPowerWatts");
+                command.Parameters.AddWithValue("param2", "MaxPriceEurocentPerMWh");
+
                 var reader = await command.ExecuteReaderAsync();
-                if (reader.HasRows)
+                var parameters = new ChargingControlParameters();
+
+                while (await reader.ReadAsync())
                 {
-                    await reader.ReadAsync();
-                    return new ChargingControlParameters()
-                    {
-                        MaxTotalPowerWatts = reader.GetInt32(1),
-                        MaxPriceEurocentPerMWh = reader.GetInt32(2),
-                    };
+                    string name = reader.GetString(0);
+                    int value = reader.GetInt32(1);
+
+                    if (name == "MaxTotalPowerWatts")
+                        parameters.MaxTotalPowerWatts = value;
+                    else if (name == "MaxPriceEurocentPerMWh")
+                        parameters.MaxPriceEurocentPerMWh = value;
                 }
-                else
-                {
-                    return new ChargingControlParameters();
-                }
+
+                return parameters;
             }
         }
     }
 
     public async Task SaveChargingParametersAsync(ChargingControlParameters chargingParameters)
     {
-        string sql ="INSERT INTO ChargingParameters(UnixTime, MaxTotalPowerWatts, MaxPriceEurocentPerMWh) "
-            +"VALUES(@time,@power,@price);";
         using (var connection = new SqliteConnection(_connectionString))
         {
             connection.Open();
+
+            string sql = "INSERT OR REPLACE INTO IntParameters(Name, Value) VALUES(@name, @value)";
+
             using (var command = new SqliteCommand(sql, connection))
             {
-                command.Parameters.AddWithValue("time", DateTimeOffset.UtcNow.ToUnixTimeSeconds());
-                command.Parameters.AddWithValue("power", chargingParameters.MaxTotalPowerWatts);
-                command.Parameters.AddWithValue("price", chargingParameters.MaxPriceEurocentPerMWh);
+                command.Parameters.AddWithValue("name", "MaxTotalPowerWatts");
+                command.Parameters.AddWithValue("value", chargingParameters.MaxTotalPowerWatts);
+                await command.ExecuteNonQueryAsync();
+            }
+
+            using (var command = new SqliteCommand(sql, connection))
+            {
+                command.Parameters.AddWithValue("name", "MaxPriceEurocentPerMWh");
+                command.Parameters.AddWithValue("value", chargingParameters.MaxPriceEurocentPerMWh);
                 await command.ExecuteNonQueryAsync();
             }
         }
