@@ -54,6 +54,8 @@ public class HomeWizardMeterDataProvider : IMeterDataProvider, IDisposable
 
             return new MeterData() 
             {
+                TotalPowerImportT1 = data.total_power_import_t1_kwh,
+                TotalPowerImportT2 = data.total_power_import_t2_kwh,
                 TotalActivePower = data.active_power_w,
                 Current1 = data.active_current_l1_a,
                 Current2 = data.active_current_l2_a,

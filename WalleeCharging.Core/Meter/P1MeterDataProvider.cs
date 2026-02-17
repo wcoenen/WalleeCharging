@@ -239,6 +239,14 @@ public class P1MeterDataProvider : IMeterDataProvider, IAsyncDisposable
                     
                     switch (obisCode)
                     {
+                        case "1-0:1.8.1":
+                            CheckUnit(line, measurementUnit, "kWh");
+                            meterData.TotalPowerImportT1 = float.Parse(measurementValue);
+                            break;
+                        case "1-0:1.8.2":
+                            CheckUnit(line, measurementUnit, "kWh");
+                            meterData.TotalPowerImportT2 = float.Parse(measurementValue);
+                            break;
                         case "1-0:31.7.0":
                             CheckUnit(line, measurementUnit, "A");
                             meterData.Current1 = float.Parse(measurementValue);
