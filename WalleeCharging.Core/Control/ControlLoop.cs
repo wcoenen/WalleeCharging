@@ -11,13 +11,13 @@ namespace WalleeCharging.Control;
 public class ControlLoop : BackgroundService
 {
     private readonly int _loopDelayMillis;
-    private readonly int _maxSafeCurrentAmpere;
     private readonly IDatabase _database;
     private readonly IMeterDataProvider _meterDataProvider;
     private readonly IChargingStation _chargingStation;
     private readonly ILogger<ControlLoop> _logger;
     private readonly INotificationSink _notificationSink;
     private readonly bool _shadowMode;
+    private readonly IEnumerable<IChargingPolicy> _chargingPolicies;
 
     public ControlLoop(
         IOptions<ControlLoopOptions> options,
@@ -25,11 +25,11 @@ public class ControlLoop : BackgroundService
         IMeterDataProvider meterDataProvider,
         IChargingStation chargingStation,
         INotificationSink notificationSink,
+        IEnumerable<IChargingPolicy> chargingPolicies,
         ILogger<ControlLoop> logger)
     {
         // settings
         _loopDelayMillis = options.Value.LoopDelayMillis;
-        _maxSafeCurrentAmpere = options.Value.MaxSafeCurrentAmpere;
         _shadowMode = options.Value.ShadowMode;
 
         // services
@@ -37,6 +37,7 @@ public class ControlLoop : BackgroundService
         _meterDataProvider = meterDataProvider;
         _chargingStation = chargingStation;
         _notificationSink = notificationSink;
+        _chargingPolicies = chargingPolicies;
         _logger = logger;
     }
 
@@ -57,71 +58,46 @@ public class ControlLoop : BackgroundService
                 ChargingStationData? chargingStationData = null;
                 MeterData? meterData = null;
                 string controlMessage;
-                
-                // Fetch data from database and check price constraint. This should be quick, so we do that first.
-                var chargingParameters = new ChargingControlParameters()
+
+                try
                 {
-                    MaxTotalPowerWatts = await _database.GetParameterAsync("MaxTotalPowerWatts"),
-                    MaxPriceEurocentPerMWh = await _database.GetParameterAsync("MaxPriceEurocentPerMWh")
-                };
-                var currentPrice = await _database.GetPriceAsync(DateTime.UtcNow);
-                if (!IsPriceAcceptable(chargingParameters, currentPrice))
-                {
-                    chargingCurrentLimit = 0;
-                    if (currentPrice == null)
+                    // Fetch meter and charging station data.
+                    // We get the meter data first to sync to fresh output of the P1 port.
+                    // (Getting "fresh" data may not be possible for all IMeterDataProvider implementations.)
+                    // If the meter and charging station data is not consistent, we read both again.
+                    int inconsistentCount = 0;
+                    do
                     {
-                        controlMessage = $"Price is unknown.";
+                        meterData = await _meterDataProvider.GetMeterDataAsync();
+                        chargingStationData = await _chargingStation.GetChargingStationDataAsync();
                     }
-                    else
+                    while (!IsConsistentData(meterData, chargingStationData) && ++inconsistentCount < 10);
+
+                    if (inconsistentCount >= 10)
                     {
-                        controlMessage = $"Price is too high: {currentPrice.PriceEurocentPerMWh} > {chargingParameters.MaxPriceEurocentPerMWh}";
+                        throw new InconsistentDataException("Unable to get consistent data from meter and charging station.");
                     }
+
+                    // Evaluate all charging policies and apply the minimum limit.
+                    var policyResults = new List<ChargingPolicyResult>();
+                    foreach (var policy in _chargingPolicies)
+                    {
+                        var result = await policy.EvaluateAsync(chargingStationData, meterData);
+                        policyResults.Add(result);
+                    }
+
+                    // Find the policy with the minimum current limit
+                    var limitingPolicy = policyResults.OrderBy(r => r.CurrentLimitAmpere).First();
+                    chargingCurrentLimit = limitingPolicy.CurrentLimitAmpere;
+                    controlMessage = limitingPolicy.Message;
                 }
-                else
+                catch (Exception e) when (e is ChargingStationException || e is MeterDataException || e is InconsistentDataException)
                 {
-                    try
-                    {
-                        // Price is acceptable.
-                        // The next checks require data from the meter and charging station.
-                        // We get the meter data first to sync to fresh output of the P1 port.
-                        // (Getting "fresh" data may not be possible for all IMeterDataProvider implementations.)
-                        // If the meter and charging station data is not consistent, we read both again.
-                        int inconsistentCount = 0;
-                        do
-                        {
-                            meterData = await _meterDataProvider.GetMeterDataAsync();
-                            chargingStationData = await _chargingStation.GetChargingStationDataAsync();
-                        }
-                        while (!IsConsistentData(meterData, chargingStationData) && ++inconsistentCount < 10);
-                        
-                        if (inconsistentCount >= 10)
-                        {
-                            throw new InconsistentDataException("Unable to get consistent data from meter and charging station.");
-                        }
-
-                        // Calculate both constraints and apply the smaller result.
-                        float charging_current_constraint1 = GetMaxCurrentWire(chargingParameters, meterData, chargingStationData);
-                        float charging_current_constraint2 = GetMaxCurrentCapacityTarif(chargingParameters, meterData, chargingStationData);
-                        if (charging_current_constraint1 <= charging_current_constraint2)
-                        {
-                            chargingCurrentLimit = charging_current_constraint1;
-                            controlMessage = $"Limiting meter current to {_maxSafeCurrentAmpere}A.";
-                        }
-                        else
-                        {
-                            chargingCurrentLimit = charging_current_constraint2;
-                            controlMessage = $"Limiting meter power to {chargingParameters.MaxTotalPowerWatts}W.";
-                        }
-
-                    }
-                    catch (Exception e) when (e is ChargingStationException || e is MeterDataException)
-                    {
-                        // Something went wrong in the communication with the meter or charging station.
-                        // Keeping charging current the same for now.
-                        chargingCurrentLimit = previousChargingCurrentLimit;
-                        controlMessage = $"Error occurred: {e.Message}";
-                        _logger.LogError(e, "Failed to retrieve information in control loop.");
-                    }
+                    // Something went wrong in the communication with the meter or charging station.
+                    // Keeping charging current the same for now.
+                    chargingCurrentLimit = previousChargingCurrentLimit;
+                    controlMessage = $"Error occurred: {e.Message}";
+                    _logger.LogError(e, "Failed to retrieve information in control loop.");
                 }
 
                 try
@@ -135,10 +111,18 @@ public class ControlLoop : BackgroundService
                         _logger.LogWarning("Running in SHADOW MODE, not sending current limit of {current} ampere", chargingCurrentLimit);
                     }
 
+                    // Fetch parameters and price for logging
+                    var chargingParameters = new ChargingControlParameters()
+                    {
+                        MaxTotalPowerWatts = await _database.GetParameterAsync("MaxTotalPowerWatts"),
+                        MaxPriceEurocentPerMWh = await _database.GetParameterAsync("MaxPriceEurocentPerMWh")
+                    };
+                    var currentPrice = await _database.GetPriceAsync(DateTime.UtcNow);
+
                     // log this control loop iteration
                     await LogAndNotify(
                         previousChargingCurrentLimit,
-                        chargingCurrentLimit, 
+                        chargingCurrentLimit,
                         chargingStationData,
                         meterData,
                         controlMessage,
@@ -233,48 +217,6 @@ public class ControlLoop : BackgroundService
             meterData,
             chargingCurrentLimit,
             controlMessage);
-    }
-
-    private float GetMaxCurrentCapacityTarif(ChargingControlParameters chargingParameters, MeterData meterData, ChargingStationData chargingStationData)
-    {
-        // current constraint 2: account for other consumers and do not exceed MaxTotalPowerWatts
-        float non_charger_power = meterData.TotalActivePower - chargingStationData.RealPowerSum;
-        float power_available_for_charging = chargingParameters.MaxTotalPowerWatts - non_charger_power;
-        float voltage_sum = meterData.Voltage1 + meterData.Voltage2 + meterData.Voltage3;
-        float charging_current_constraint2 = power_available_for_charging / voltage_sum;
-        _logger.LogDebug($"GetMaxCurrentCapacityTarif result: {charging_current_constraint2:f2} ampere");
-        return charging_current_constraint2;
-    }
-
-    private float GetMaxCurrentWire(ChargingControlParameters chargingParameters, MeterData meterData, ChargingStationData chargingStationData)
-    {
-        // current constraint 1: account for other consumers and do not exceed MaxPhaseCurrentAmpere
-        // To be conservative and to avoid having to map the phases in the reported meter data versus charger data,
-        // we assume the smallest charging current is currently being drawn from all 3 phases. This slightly
-        // overestimates the non-charger loads. 
-        // (Note that for one phase charging this doesn't work; smallest_charging_current would be zero.)
-        float smallest_charging_current = Math.Min(
-            Math.Min(chargingStationData.Current1, chargingStationData.Current2),
-            chargingStationData.Current3);
-        float current_non_charger_1 = meterData.Current1 - smallest_charging_current;
-        float current_non_charger_2 = meterData.Current2 - smallest_charging_current;
-        float current_non_charger_3 = meterData.Current3 - smallest_charging_current;
-        float wire_capacity_available_1 = _maxSafeCurrentAmpere - current_non_charger_1;
-        float wire_capacity_available_2 = _maxSafeCurrentAmpere - current_non_charger_2;
-        float wire_capacity_available_3 = _maxSafeCurrentAmpere - current_non_charger_3;
-        float charging_current_constraint1 = Math.Min(
-            Math.Min(wire_capacity_available_1, wire_capacity_available_2),
-            wire_capacity_available_3);
-        _logger.LogDebug($"GetMaxCurrentWire result: {charging_current_constraint1:f2} ampere");
-        return charging_current_constraint1;
-    }
-
-    private bool IsPriceAcceptable(ChargingControlParameters chargingParameters, ElectricityPrice? currentPrice)
-    {
-        bool result = currentPrice != null 
-            && currentPrice.PriceEurocentPerMWh <= chargingParameters.MaxPriceEurocentPerMWh;
-        _logger.LogDebug("IsPriceAcceptable result: {result}", result);
-        return result;
     }
 
 

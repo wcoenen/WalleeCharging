@@ -76,6 +76,11 @@ try
     builder.Services.Configure<AlfenEveOptions>(config.GetSection("AlfenEve"));
     builder.Services.AddSingleton<IChargingStation, AlfenEveModbusChargingStation>();
 
+    // Charging policies
+    builder.Services.AddSingleton<IChargingPolicy, PricePolicy>();
+    builder.Services.AddSingleton<IChargingPolicy, WireCapacityPolicy>();
+    builder.Services.AddSingleton<IChargingPolicy, CapacityTariffPolicy>();
+
     // ControlLoop background worker
     builder.Services.Configure<ControlLoopOptions>(config.GetSection("ControlLoop"));
     builder.Services.AddHostedService<ControlLoop>();
