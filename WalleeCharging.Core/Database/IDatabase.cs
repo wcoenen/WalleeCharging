@@ -4,8 +4,8 @@ namespace WalleeCharging.Database;
 
 public interface IDatabase
 {
-    Task<ChargingControlParameters> GetChargingParametersAsync();
-    Task SaveChargingParametersAsync(ChargingControlParameters chargingParameters);
+    Task<int> GetParameterAsync(string name);
+    Task SaveParameterAsync(string name, int value);
 
     Task<ElectricityPrice?> GetPriceAsync(DateTime time);
     IAsyncEnumerable<ElectricityPrice> GetPricesAsync(DateTime timeStart, DateTime timeEnd);

@@ -54,55 +54,38 @@ public class SqliteDatabase : IDatabase
         }
     }
 
-    public async Task<ChargingControlParameters> GetChargingParametersAsync()
+    public async Task<int> GetParameterAsync(string name)
     {
-        string sql = "SELECT Name, Value FROM IntParameters WHERE Name IN (@param1, @param2)";
+        string sql = "SELECT Value FROM IntParameters WHERE Name = @name";
         using (var connection = new SqliteConnection(_connectionString))
         {
             connection.Open();
             using (var command = new SqliteCommand(sql, connection))
             {
-                command.Parameters.AddWithValue("param1", "MaxTotalPowerWatts");
-                command.Parameters.AddWithValue("param2", "MaxPriceEurocentPerMWh");
-
+                command.Parameters.AddWithValue("name", name);
                 var reader = await command.ExecuteReaderAsync();
-                var parameters = new ChargingControlParameters();
-
-                while (await reader.ReadAsync())
+                if (await reader.ReadAsync())
                 {
-                    string name = reader.GetString(0);
-                    int value = reader.GetInt32(1);
-
-                    if (name == "MaxTotalPowerWatts")
-                        parameters.MaxTotalPowerWatts = value;
-                    else if (name == "MaxPriceEurocentPerMWh")
-                        parameters.MaxPriceEurocentPerMWh = value;
+                    return reader.GetInt32(0);
                 }
-
-                return parameters;
+                else
+                {
+                    return 0; // Return default value if parameter not found
+                }
             }
         }
     }
 
-    public async Task SaveChargingParametersAsync(ChargingControlParameters chargingParameters)
+    public async Task SaveParameterAsync(string name, int value)
     {
+        string sql = "INSERT OR REPLACE INTO IntParameters(Name, Value) VALUES(@name, @value)";
         using (var connection = new SqliteConnection(_connectionString))
         {
             connection.Open();
-
-            string sql = "INSERT OR REPLACE INTO IntParameters(Name, Value) VALUES(@name, @value)";
-
             using (var command = new SqliteCommand(sql, connection))
             {
-                command.Parameters.AddWithValue("name", "MaxTotalPowerWatts");
-                command.Parameters.AddWithValue("value", chargingParameters.MaxTotalPowerWatts);
-                await command.ExecuteNonQueryAsync();
-            }
-
-            using (var command = new SqliteCommand(sql, connection))
-            {
-                command.Parameters.AddWithValue("name", "MaxPriceEurocentPerMWh");
-                command.Parameters.AddWithValue("value", chargingParameters.MaxPriceEurocentPerMWh);
+                command.Parameters.AddWithValue("name", name);
+                command.Parameters.AddWithValue("value", value);
                 await command.ExecuteNonQueryAsync();
             }
         }

@@ -59,7 +59,11 @@ public class ControlLoop : BackgroundService
                 string controlMessage;
                 
                 // Fetch data from database and check price constraint. This should be quick, so we do that first.
-                var chargingParameters = await _database.GetChargingParametersAsync();
+                var chargingParameters = new ChargingControlParameters()
+                {
+                    MaxTotalPowerWatts = await _database.GetParameterAsync("MaxTotalPowerWatts"),
+                    MaxPriceEurocentPerMWh = await _database.GetParameterAsync("MaxPriceEurocentPerMWh")
+                };
                 var currentPrice = await _database.GetPriceAsync(DateTime.UtcNow);
                 if (!IsPriceAcceptable(chargingParameters, currentPrice))
                 {

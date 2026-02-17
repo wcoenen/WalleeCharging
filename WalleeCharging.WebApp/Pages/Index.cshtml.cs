@@ -22,18 +22,17 @@ public class IndexModel : PageModel
 
     public async Task OnGetAsync()
     {
-        ChargingParameters = await _database.GetChargingParametersAsync();
+        ChargingParameters = new ChargingControlParameters()
+        {
+            MaxTotalPowerWatts = await _database.GetParameterAsync("MaxTotalPowerWatts"),
+            MaxPriceEurocentPerMWh = await _database.GetParameterAsync("MaxPriceEurocentPerMWh")
+        };
     }
 
     public async Task<ActionResult> OnPostAsync(int maxTotalPowerWatts, int maxPriceEurocentPerMWh)
     {
-        await _database.SaveChargingParametersAsync(
-            new ChargingControlParameters()
-            {
-                MaxTotalPowerWatts = maxTotalPowerWatts,
-                MaxPriceEurocentPerMWh = maxPriceEurocentPerMWh
-            }
-        );
+        await _database.SaveParameterAsync("MaxTotalPowerWatts", maxTotalPowerWatts);
+        await _database.SaveParameterAsync("MaxPriceEurocentPerMWh", maxPriceEurocentPerMWh);
         return new NoContentResult();
     }
 }
