@@ -5,19 +5,23 @@ using WalleeCharging.ManualTests;
 using System.Text;
 using Microsoft.Extensions.Options;
 
-Console.WriteLine("[1] EntsoePriceFetcher");
+Console.WriteLine("[1] EntsoePriceFetcher - fetch one month of prices to CSV");
 Console.WriteLine("[2] P1PortReader");
+Console.WriteLine("[3] EntsoePriceFetcher - download raw XML for a specific date");
 Console.WriteLine("Test choice: ");
 string? choice = Console.ReadLine();
 switch (choice)
 {
-    case "1": 
+    case "1":
         await TestEntsoePriceFetcherAsync();
         break;
     case "2":
         await TestP1PortReaderAsync();
         break;
-    default: 
+    case "3":
+        await DownloadEntsoeXmlAsync();
+        break;
+    default:
         Environment.Exit(0);
         break;
 }
@@ -80,6 +84,58 @@ async Task TestEntsoePriceFetcherAsync()
         }
     }
     Console.WriteLine($"Done! Prices written to '{targetFilePath}'");
+}
+
+async Task DownloadEntsoeXmlAsync()
+{
+    Console.WriteLine("Enter the date to fetch prices for.");
+    Console.WriteLine("Year (4 digits):");
+    string? yearText = Console.ReadLine();
+    Console.WriteLine("Month (1 or 2 digits):");
+    string? monthText = Console.ReadLine();
+    Console.WriteLine("Day (1 or 2 digits):");
+    string? dayText = Console.ReadLine();
+    if (string.IsNullOrEmpty(yearText) || string.IsNullOrEmpty(monthText) || string.IsNullOrEmpty(dayText))
+    {
+        Console.WriteLine("ERROR: Unable to parse!");
+        return;
+    }
+    int year = Int32.Parse(yearText);
+    int month = Int32.Parse(monthText);
+    int day = Int32.Parse(dayText);
+
+    var config = new ConfigurationBuilder()
+        .AddUserSecrets<Program>()
+        .Build();
+    string entsoeApiToken = config["EntsoeApiKey"] ?? throw new ConfigurationErrorsException("missing EntsoeApiKey");
+
+    const string domain = "10YBE----------2";
+    string periodText = new DateTime(year, month, day).ToString("yyyyMMddHHmm");
+    string url = "https://web-api.tp.entsoe.eu/api?"
+        + $"securityToken={Uri.EscapeDataString(entsoeApiToken)}"
+        + $"&documentType=A44"
+        + $"&in_Domain={Uri.EscapeDataString(domain)}"
+        + $"&out_Domain={Uri.EscapeDataString(domain)}"
+        + $"&periodStart={Uri.EscapeDataString(periodText)}"
+        + $"&periodEnd={Uri.EscapeDataString(periodText)}";
+
+    Console.WriteLine($"Fetching XML for {year:d4}-{month:d2}-{day:d2}...");
+    using var httpClient = new HttpClient();
+    var response = await httpClient.GetAsync(url);
+    string xml = await response.Content.ReadAsStringAsync();
+    if (!response.IsSuccessStatusCode)
+    {
+        Console.WriteLine($"ERROR: HTTP {(int)response.StatusCode} {response.StatusCode}");
+        Console.WriteLine(xml);
+        return;
+    }
+
+    string targetFilePath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        "Downloads",
+        $"entsoe_{year:d4}{month:d2}{day:d2}.xml");
+    await File.WriteAllTextAsync(targetFilePath, xml);
+    Console.WriteLine($"Done! XML saved to '{targetFilePath}'");
 }
 
 async Task TestP1PortReaderAsync()
