@@ -133,5 +133,8 @@ function highlightBarsWithPriceEqualOrBelow(selectedPrice) {
     var dataset = currentChart.data.datasets[0];
     dataset.backgroundColor = backgroundColors;
     currentChart.update();
+
+    const highlightedCount = backgroundColors.filter(c => c === '#9ad0f5').length;
+    document.getElementById('highlightedPriceCount').textContent = `${highlightedCount} of ${currentChart.prices.length} prices are at or below the set price limit.`;
 }
 
