@@ -12,6 +12,7 @@ namespace WalleeCharging.Control;
 public class MaxMeterPowerOverQuarterHourPolicy : IChargingPolicy
 {
     private const int SNOOZE_DURATION_SECONDS = 180; // 3 minutes, i.e. 20% of a quarter hour
+    private const float MINIMUM_CHARGING_CURRENT = 6;
     private readonly IDatabase _database;
     private readonly ILogger<MaxMeterPowerOverQuarterHourPolicy> _logger;
     private Tuple<DateTime,double> _import_at_start_of_quarterhour_kWh;
@@ -41,14 +42,14 @@ public class MaxMeterPowerOverQuarterHourPolicy : IChargingPolicy
 
         // If snoozing, return early with 0 ampere limit, or end snooze and continue.
         //
-        // 6 amps is the minimum which the charging station can communicate to the car,
-        // so a limit below 6 amps stops the charging. Stopping charging then
-        // leads to much slower depletion of the remaining energy budget, which
+        // MINIMUM_CHARGING_CURRENT is the minimum which the charging station can
+        // communicate to the car, so a lower limit stops the charging. Stopping charging
+        // then leads to much slower depletion of the remaining energy budget, which
         // quickly raises the current limit again. This can lead to twitchy behavior
         // where the charging frequently stops and starts. To mitigate this,
         // we don't charge again until at least SNOOZE_DURATION_SECONDS have elapsed
-        // This allows the current limit to recover well above 6 amps before we start
-        // charging again.
+        // This allows the current limit to recover well above MINIMUM_CHARGING_CURRENT
+        // before we start charging again.
         if (_snoozeStartTimeUtc.HasValue)
         {
             double secondsSinceSnoozeStart = (utcNow - _snoozeStartTimeUtc.Value).TotalSeconds;
@@ -67,7 +68,8 @@ public class MaxMeterPowerOverQuarterHourPolicy : IChargingPolicy
         }
 
         // If we get here, no snooze is active.
-        // Calculate current limit from remaining energy budget
+        // Calculate current limit from remaining energy budget.
+        // Because the latest meter data is used, charging power will be automatically reduced to compensate for other consumers.
         double energyBudget_Joules = maxTotalPowerWatts * 900;
         double consumed_Joules = (meterData.TotalPowerImport - _import_at_start_of_quarterhour_kWh.Item2) * 3_600_000;
         double remaining_Joules = energyBudget_Joules - consumed_Joules;
@@ -76,8 +78,18 @@ public class MaxMeterPowerOverQuarterHourPolicy : IChargingPolicy
         float voltage_sum = meterData.Voltage1 + meterData.Voltage2 + meterData.Voltage3;
         float currentLimit = (float)(powerLimit_watt / voltage_sum);
 
+        // This charging policy has a tendency to briefly disable charging in the last 10 seconds of the quarter-hour.
+        // That happens because the remaining energy budget is typically smaller than expected due to other consumers.
+        // Earlier in the quarter-hour this is not a problem as charging power is gradually reduced to compensate.
+        // But for the last bit of energy budget, this doesn't work well and causes a sudden drop below MINIMUM_CHARGING_CURRENT.
+        // To avoid this, allow for a small overshoot of the energy budget.
+        if (0 < currentLimit && currentLimit < MINIMUM_CHARGING_CURRENT && remaining_seconds < 10)
+        {
+            currentLimit = MINIMUM_CHARGING_CURRENT;
+        }
+
         // start snooze if necessary
-        if (currentLimit < 6)
+        if (currentLimit < MINIMUM_CHARGING_CURRENT)
         {
             _snoozeStartTimeUtc = utcNow;
             currentLimit = 0;
