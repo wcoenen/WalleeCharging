@@ -13,7 +13,12 @@
     <PackageReference Include="Mono.IO.Ports" Version="0.0.1" />
     <PackageReference Include="NewtonSoft.Json" Version="13.0.3" />
     <PackageReference Include="NModbus" Version="3.0.81" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <!--
+      Only present to avoid dependency on vulnerable version.
+      Can be removed when upgrading Microsoft.Data.Sqlite.
+    -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
   </ItemGroup>
 
 </Project>
