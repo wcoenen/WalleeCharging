@@ -15,17 +15,13 @@ public class SignalRNotificationSink : INotificationSink
     {
         _hubContext = hubContext;
     }
-    
 
     public Task Notify(
-        ChargingControlParameters chargingControlParameters,
-        int? price,
         ChargingStationData? chargingStationData,
         MeterData? meterData,
         float currentLimitAmpere,
         string message)
     {
-        
 
         // see also WalleeCharging.WebApp/wwwroot/js/signalRSubscriber.js
         return _hubContext.Clients.All.SendAsync(

@@ -21,25 +21,50 @@ public class SqliteDatabase : IDatabase
         
         _connectionString = $"Data Source={databaseFilePath}";
 
-        if (newDatabase)
-        {
-            InitializeDatabaseSchema();
-        }
+        InitializeDatabaseSchema();
     }
 
     private void InitializeDatabaseSchema()
     {
         _logger.LogInformation("Initializing new sqlite database");
-        // Time is always stored as the number of seconds since 1970-01-01 00:00:00 UTC, aka "unix time".
 
         // Integer parameters stored as name-value pairs.
-        ExecuteNonQuery("CREATE TABLE IntParameters "
-            + "(Name TEXT PRIMARY KEY, Value INTEGER)");
+        if (!DoesTableExist("IntParameters"))
+        {
+            
+            ExecuteNonQuery("CREATE TABLE IntParameters (Name TEXT PRIMARY KEY, Value INTEGER)");
+        }
+
+        // Boolean parameters stored as name-value pairs.
+        if (!DoesTableExist("BoolParameters"))
+        {
+            
+            ExecuteNonQuery("CREATE TABLE BoolParameters (Name TEXT PRIMARY KEY, Value INTEGER)");
+        }
+
 
         // Price points for the day-ahead market for electricity.
         // Because there has been a transition from 60-minute to 15-minute intervals, we don't make assumptions about interval length.
         // Each price point has a start time (inclusive) and end time (exclusive).
-        ExecuteNonQuery("CREATE TABLE DayAheadPrice (StartUnixTime INTEGER, EndUnixTime INTEGER, PriceEurocentPerMWh INTEGER)");
+        // Time is always stored as the number of seconds since 1970-01-01 00:00:00 UTC, aka "unix time".
+        if (!DoesTableExist("DayAheadPrice"))
+        {
+            ExecuteNonQuery("CREATE TABLE DayAheadPrice (StartUnixTime INTEGER, EndUnixTime INTEGER, PriceEurocentPerMWh INTEGER)");
+        }
+    }
+
+    private bool DoesTableExist(string tableName)
+    {
+        string sql = $"SELECT name FROM sqlite_master WHERE type='table' AND name='{tableName}'";
+        using (var connection = new SqliteConnection(_connectionString))
+        {
+            connection.Open();
+            using (var command = new SqliteCommand(sql, connection))
+            {
+                var reader = command.ExecuteReader();
+                return reader.HasRows;
+            }
+        }        
     }
 
     private void ExecuteNonQuery(string sql)
@@ -54,7 +79,45 @@ public class SqliteDatabase : IDatabase
         }
     }
 
-    public async Task<int> GetParameterAsync(string name)
+    public async Task<bool?> GetBoolParameterAsync(string name)
+    {
+        string sql = "SELECT Value FROM BoolParameters WHERE Name = @name";
+        using (var connection = new SqliteConnection(_connectionString))
+        {
+            connection.Open();
+            using (var command = new SqliteCommand(sql, connection))
+            {
+                command.Parameters.AddWithValue("name", name);
+                var reader = await command.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
+                {
+                    return reader.GetBoolean(0);
+                }
+                else
+                {
+                    return null;
+                }
+            }
+        }
+    }
+
+    public async Task SaveBoolParameterAsync(string name, bool value)
+    {
+        string sql = "INSERT OR REPLACE INTO BoolParameters(Name, Value) VALUES(@name, @value)";
+        using (var connection = new SqliteConnection(_connectionString))
+        {
+            connection.Open();
+            using (var command = new SqliteCommand(sql, connection))
+            {
+                command.Parameters.AddWithValue("name", name);
+                command.Parameters.AddWithValue("value", value);
+                await command.ExecuteNonQueryAsync();
+            }
+        }
+        _logger.LogInformation("Saved bool parameter '{name}' with value '{value}' in sqlite database", name, value);
+    }
+
+    public async Task<int?> GetIntParameterAsync(string name)
     {
         string sql = "SELECT Value FROM IntParameters WHERE Name = @name";
         using (var connection = new SqliteConnection(_connectionString))
@@ -70,13 +133,13 @@ public class SqliteDatabase : IDatabase
                 }
                 else
                 {
-                    return 0; // Return default value if parameter not found
+                    return null;
                 }
             }
         }
     }
 
-    public async Task SaveParameterAsync(string name, int value)
+    public async Task SaveIntParameterAsync(string name, int value)
     {
         string sql = "INSERT OR REPLACE INTO IntParameters(Name, Value) VALUES(@name, @value)";
         using (var connection = new SqliteConnection(_connectionString))
@@ -89,6 +152,8 @@ public class SqliteDatabase : IDatabase
                 await command.ExecuteNonQueryAsync();
             }
         }
+
+        _logger.LogInformation("Saved int parameter '{name}' with value '{value}' in sqlite database", name, value);
     }
 
     public async Task<ElectricityPrice?> GetPriceAsync(DateTime time)

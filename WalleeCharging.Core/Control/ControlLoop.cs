@@ -111,23 +111,13 @@ public class ControlLoop : BackgroundService
                         _logger.LogWarning("Running in SHADOW MODE, not sending current limit of {current} ampere", chargingCurrentLimit);
                     }
 
-                    // Fetch parameters and price for logging
-                    var chargingParameters = new ChargingControlParameters()
-                    {
-                        MaxTotalPowerWatts = await _database.GetParameterAsync("MaxTotalPowerWatts"),
-                        MaxPriceEurocentPerMWh = await _database.GetParameterAsync("MaxPriceEurocentPerMWh")
-                    };
-                    var currentPrice = await _database.GetPriceAsync(DateTime.UtcNow);
-
                     // log this control loop iteration
                     await LogAndNotify(
                         previousChargingCurrentLimit,
                         chargingCurrentLimit,
                         chargingStationData,
                         meterData,
-                        controlMessage,
-                        chargingParameters,
-                        currentPrice?.PriceEurocentPerMWh);
+                        controlMessage);
                 }
                 catch (ChargingStationException e)
                 {
@@ -175,9 +165,7 @@ public class ControlLoop : BackgroundService
         float chargingCurrentLimit,  
         ChargingStationData? chargingStationData,
         MeterData? meterData,
-        string controlMessage,
-        ChargingControlParameters chargingParameters,
-        int? currentPrice)
+        string controlMessage)
     {
         // Determine log level.
         // Only log at the Information level if the charging current limit is changing by at least 10%.
@@ -196,14 +184,10 @@ public class ControlLoop : BackgroundService
         _logger.Log(
             controlLoopIterationLogLevel,
             "Control loop update.\n"
-                + "- charging parameters: {parameters}\n"
-                + "- current price: {price}\n"
                 + "- charging station data: {chargingStationData}\n"
                 + "- meterData: {meterData}\n"
                 + "- next current limit setpoint: {currentLimit}\n"
                 + "- control message: {message}",
-            chargingParameters,
-            currentPrice,
             chargingStationData,
             meterData,
             chargingCurrentLimit,
@@ -211,8 +195,6 @@ public class ControlLoop : BackgroundService
 
         // notify users
         await _notificationSink.Notify(
-            chargingParameters,
-            currentPrice,
             chargingStationData,
             meterData,
             chargingCurrentLimit,

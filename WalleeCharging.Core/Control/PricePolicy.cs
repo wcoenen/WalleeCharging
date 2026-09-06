@@ -7,6 +7,9 @@ namespace WalleeCharging.Control;
 
 public class PricePolicy : IChargingPolicy
 {
+    public const string BoolParameterName_AllowChargingWhenPriceUnknown = "AllowChargingWhenPriceUnknown";
+    public const string IntParameterName_MaxPriceEurocentPerMWh = "MaxPriceEurocentPerMWh";
+
     private readonly IDatabase _database;
     private readonly ILogger<PricePolicy> _logger;
 
@@ -18,36 +21,45 @@ public class PricePolicy : IChargingPolicy
 
     public async Task<ChargingPolicyResult> EvaluateAsync(ChargingStationData? chargingStationData, MeterData? meterData)
     {
-        var maxPriceEurocentPerMWh = await _database.GetParameterAsync("MaxPriceEurocentPerMWh");
+        string message;
+        float currentLimitAmpere;
         var currentPrice = await _database.GetPriceAsync(DateTime.UtcNow);
 
+        // 1. Price is unknown: check relevant setting to determine whether charging is allowed or not.
         if (currentPrice == null)
         {
-            _logger.LogDebug("Price is unknown");
-            return new ChargingPolicyResult
+            if (_database.GetBoolParameterAsync(BoolParameterName_AllowChargingWhenPriceUnknown).Result == true)
             {
-                CurrentLimitAmpere = 0,
-                Message = "Price is unknown."
-            };
+                message = "Price is unknown, but current configuration allows charging at unknown price";
+                currentLimitAmpere = float.MaxValue;
+            }
+            else
+            {
+                message = "Price is unknown, and current configuration does not allow charging at unknown price";
+                currentLimitAmpere = 0;
+            }
         }
-
-        if (currentPrice.PriceEurocentPerMWh > maxPriceEurocentPerMWh)
+        else // 2. Current price is known: compare to the maximum price setting to determine whether charging is allowed or not.
         {
-            _logger.LogDebug("Price is too high: {currentPrice} > {maxPrice}",
-                currentPrice.PriceEurocentPerMWh, maxPriceEurocentPerMWh);
-            return new ChargingPolicyResult
+            var maxPriceEurocentPerMWh = await _database.GetIntParameterAsync(IntParameterName_MaxPriceEurocentPerMWh);
+
+            if (currentPrice.PriceEurocentPerMWh > maxPriceEurocentPerMWh)
             {
-                CurrentLimitAmpere = 0,
-                Message = $"Price is too high: {currentPrice.PriceEurocentPerMWh} > {maxPriceEurocentPerMWh}"
-            };
+                message = $"Price is too high: {currentPrice.PriceEurocentPerMWh} > {maxPriceEurocentPerMWh}";
+                currentLimitAmpere = 0;
+            }
+            else
+            {
+                message = $"Price is acceptable: {currentPrice.PriceEurocentPerMWh} <= {maxPriceEurocentPerMWh}";
+                currentLimitAmpere = float.MaxValue;
+            }
         }
 
-        _logger.LogDebug("Price is acceptable: {currentPrice} <= {maxPrice}",
-            currentPrice.PriceEurocentPerMWh, maxPriceEurocentPerMWh);
+        _logger.LogDebug("Price policy result: {currentLimit:f2} ampere, message: {message}", currentLimitAmpere, message);
         return new ChargingPolicyResult
         {
-            CurrentLimitAmpere = float.MaxValue,
-            Message = "Price is acceptable."
+            CurrentLimitAmpere = currentLimitAmpere,
+            Message = message
         };
     }
 }

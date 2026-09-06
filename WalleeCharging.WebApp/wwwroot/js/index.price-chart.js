@@ -32,10 +32,10 @@ function scheduleQuarterHourRefresh() {
 scheduleQuarterHourRefresh();
 
 // chart reacts to changes in max price input field
-document.getElementById('maxPriceEurocentPerMWh').addEventListener("change", updateHighlightedBars);
+document.getElementById('MaxPriceEurocentPerMWh').addEventListener("change", updateHighlightedBars);
 
 function updateHighlightedBars() {
-  const currentMaxPrice = document.getElementById('maxPriceEurocentPerMWh').value;
+  const currentMaxPrice = document.getElementById('MaxPriceEurocentPerMWh').value;
   highlightBarsWithPriceEqualOrBelow(currentMaxPrice);
 }
 
@@ -107,7 +107,7 @@ function clickHandler(click)
   const clickedPrice = currentChart.prices[points[0].index];
 
   // set max price textbox
-  document.getElementById('maxPriceEurocentPerMWh').setAttribute('value', clickedPrice);
+  document.getElementById('MaxPriceEurocentPerMWh').setAttribute('value', clickedPrice);
 
   // highlight bars representing a value equal to or below the selected one
   highlightBarsWithPriceEqualOrBelow(clickedPrice);

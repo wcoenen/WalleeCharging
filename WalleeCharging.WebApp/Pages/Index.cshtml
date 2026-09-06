@@ -10,12 +10,17 @@
 <form method="post">
     <div>
         <label>Max meter power [watts]</label>
-        <input type="number" name="maxTotalPowerWatts" value="@Model.ChargingParameters.MaxTotalPowerWatts"> 
+        <input asp-for="MaxTotalPowerWatts" type="number"> 
+    </div>
+
+    <div>
+        <label>Allow charging when price unknown</label>
+        <input asp-for="AllowChargingWhenPriceUnknown" type="checkbox">
     </div>
 
     <div>
         <label>Max day-ahead price [eurocent/MWh]</label>
-        <input id="maxPriceEurocentPerMWh" type="number" name="maxPriceEurocentPerMWh" value="@Model.ChargingParameters.MaxPriceEurocentPerMWh">
+        <input asp-for="MaxPriceEurocentPerMWh" type="number">
         <div style="margin-left:2em; margin-top:0.5em;">
             <div>
                 <input type="button" value="-" onclick="decreaseMaxPrice()">
@@ -30,6 +35,7 @@
             </div>
         </div>
     </div>
+
     <div>
         <input type="submit">
     </div>

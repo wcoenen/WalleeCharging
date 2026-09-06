@@ -11,6 +11,7 @@ namespace WalleeCharging.Control;
 /// </summary>
 public class MaxMeterPowerOverQuarterHourPolicy : IChargingPolicy
 {
+    public const string IntParameterName_MaxTotalPowerWatts = "MaxTotalPowerWatts";
     private const int SNOOZE_DURATION_SECONDS = 180; // 3 minutes, i.e. 20% of a quarter hour
     private const float MINIMUM_CHARGING_CURRENT = 6;
     private readonly IDatabase _database;
@@ -34,7 +35,7 @@ public class MaxMeterPowerOverQuarterHourPolicy : IChargingPolicy
             throw new ArgumentNullException("ChargingStationData and MeterData are required for MaxMeterPowerOverQuarterHourPolicy");
         }
 
-        var maxTotalPowerWatts = await _database.GetParameterAsync("MaxTotalPowerWatts");
+        int maxTotalPowerWatts = await _database.GetIntParameterAsync(IntParameterName_MaxTotalPowerWatts) ?? 0;
 
         // check for potential fresh start for a new quarter-hour
         DateTime utcNow = DateTime.UtcNow;
@@ -105,7 +106,7 @@ public class MaxMeterPowerOverQuarterHourPolicy : IChargingPolicy
     /// <summary>
     /// If _import_at_start_of_quarterhour_kWh is not for the most recent quarter-hour, update it.
     /// </summary>
-    private void UpdateImportAtStartOfQuarterHour(DateTime utcNow, MeterData meterData, float maxTotalPowerWatts)
+    private void UpdateImportAtStartOfQuarterHour(DateTime utcNow, MeterData meterData, int maxTotalPowerWatts)
     {
         DateTime mostRecentQuarterHour = GetMostRecentQuarterHourUtc(utcNow);
         if (_import_at_start_of_quarterhour_kWh.Item1 < mostRecentQuarterHour)

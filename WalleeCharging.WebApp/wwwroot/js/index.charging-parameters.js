@@ -1,5 +1,5 @@
 function increaseMaxPrice() {
-    const input = document.getElementById("maxPriceEurocentPerMWh");
+    const input = document.getElementById("MaxPriceEurocentPerMWh");
     let currentValue = parseInt(input.value);
 
     // get prices in chart
@@ -19,7 +19,7 @@ function increaseMaxPrice() {
 }
 
 function decreaseMaxPrice() {
-    const input = document.getElementById("maxPriceEurocentPerMWh");
+    const input = document.getElementById("MaxPriceEurocentPerMWh");
     let currentValue = parseInt(input.value);
 
     // get prices in chart
@@ -40,7 +40,7 @@ function decreaseMaxPrice() {
 
 function setMaxPriceToPercentile(percentile) {
     
-    const input = document.getElementById("maxPriceEurocentPerMWh");
+    const input = document.getElementById("MaxPriceEurocentPerMWh");
     let currentValue = parseInt(input.value);
     
     if (percentile < 0 || percentile > 1) {

@@ -8,8 +8,6 @@ namespace WalleeCharging.Control;
 public interface INotificationSink
 {
     Task Notify(
-        ChargingControlParameters chargingControlParameters,
-        int? price,
         ChargingStationData? chargingStationData,
         MeterData? meterData,
         float currentLimitAmpere,
