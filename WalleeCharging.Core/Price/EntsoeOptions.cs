@@ -17,5 +17,5 @@ public class EntsoeOptions
     /// <remarks>
     /// Default is a subdirectory "WalleeEntsoeDebug" in the system's temporary directory.
     /// </remarks>
-    public string? ResponseDebugDirectory { get; set; } = Path.Combine(Path.GetTempPath(), "WalleeEntsoeDebug");
+    public string ResponseDebugDirectory { get; set; } = Path.Combine(Path.GetTempPath(), "WalleeEntsoeDebug");
 }

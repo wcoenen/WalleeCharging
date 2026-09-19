@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using WalleeCharging.Price;
 
 namespace WalleeCharging.Core.Tests.Price;
@@ -17,7 +19,7 @@ public class EntsoeResponseParserTests
     {
         string xml = ReadTestVector("entsoe_20251001.xml");
 
-        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml);
+        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml, NullLogger.Instance);
 
         Assert.HasCount(96, prices);
     }
@@ -27,7 +29,7 @@ public class EntsoeResponseParserTests
     {
         string xml = ReadTestVector("entsoe_20251001.xml");
 
-        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml);
+        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml, NullLogger.Instance);
 
         TimeSpan quarterHour = TimeSpan.FromMinutes(15);
         for (int i = 0; i < prices.Length; i++)
@@ -47,7 +49,8 @@ public class EntsoeResponseParserTests
     {
         string xml = ReadTestVector("entsoe_20251001.xml");
 
-        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml);
+        ILogger logger = NullLogger.Instance;
+        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml, logger);
 
         // Position 1: price.amount 102.68 EUR/MWh = 10268 eurocent/MWh
         Assert.AreEqual(new DateTime(2025, 9, 30, 22, 0, 0, DateTimeKind.Utc), prices[0].StartTime);
@@ -60,7 +63,7 @@ public class EntsoeResponseParserTests
     {
         string xml = ReadTestVector("entsoe_20251001.xml");
 
-        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml);
+        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml, NullLogger.Instance);
 
         // Position 96: price.amount 80.61 EUR/MWh = 8061 eurocent/MWh
         Assert.AreEqual(new DateTime(2025, 10, 1, 21, 45, 0, DateTimeKind.Utc), prices[95].StartTime);
@@ -78,7 +81,7 @@ public class EntsoeResponseParserTests
     {
         string xml = ReadTestVector("entsoe_20250930.xml");
 
-        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml);
+        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml, NullLogger.Instance);
 
         Assert.HasCount(24, prices);
     }
@@ -88,7 +91,7 @@ public class EntsoeResponseParserTests
     {
         string xml = ReadTestVector("entsoe_20250930.xml");
 
-        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml);
+        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml, NullLogger.Instance);
 
         TimeSpan oneHour = TimeSpan.FromHours(1);
         for (int i = 0; i < prices.Length - 1; i++)
@@ -105,7 +108,7 @@ public class EntsoeResponseParserTests
     {
         string xml = ReadTestVector("entsoe_20250930.xml");
 
-        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml);
+        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml, NullLogger.Instance);
 
         // Position 93 is the last point; with no following position the parser
         // extends it to the period endTime (2025-09-30T22:00Z), covering a full hour.
@@ -117,7 +120,7 @@ public class EntsoeResponseParserTests
     {
         string xml = ReadTestVector("entsoe_20250930.xml");
 
-        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml);
+        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml, NullLogger.Instance);
 
         // Position 1, next position 5: covers 2025-09-29T22:00Z–23:00Z, price 86.08 EUR/MWh
         Assert.AreEqual(new DateTime(2025, 9, 29, 22, 0, 0, DateTimeKind.Utc), prices[0].StartTime);
@@ -130,7 +133,7 @@ public class EntsoeResponseParserTests
     {
         string xml = ReadTestVector("entsoe_20250930.xml");
 
-        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml);
+        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml, NullLogger.Instance);
 
         // Position 93 (index 23): 2025-09-30T21:00Z–22:00Z, price 88.70 EUR/MWh
         Assert.AreEqual(new DateTime(2025, 9, 30, 21, 0, 0, DateTimeKind.Utc), prices[23].StartTime);
@@ -143,7 +146,7 @@ public class EntsoeResponseParserTests
     {
         string xml = ReadTestVector("entsoe_20250930.xml");
 
-        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml);
+        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml, NullLogger.Instance);
 
         // Position 77 (index 19): 2025-09-30T17:00Z–18:00Z, price 206.59 EUR/MWh
         Assert.AreEqual(new DateTime(2025, 9, 30, 17, 0, 0, DateTimeKind.Utc), prices[19].StartTime);
@@ -156,12 +159,25 @@ public class EntsoeResponseParserTests
     {
         string xml = ReadTestVector("entsoe_20251001.xml");
 
-        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml);
+        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml, NullLogger.Instance);
 
         // Position 77 (index 76): price.amount 340.79 EUR/MWh = 34079 eurocent/MWh
         // startTime = 2025-09-30T22:00Z + 76 * 15min = 2025-10-01T17:00Z
         Assert.AreEqual(new DateTime(2025, 10, 1, 17, 0, 0, DateTimeKind.Utc), prices[76].StartTime);
         Assert.AreEqual(new DateTime(2025, 10, 1, 17, 15, 0, DateTimeKind.Utc), prices[76].EndTime);
         Assert.AreEqual(34079, prices[76].PriceEurocentPerMWh);
+    }
+
+    [TestMethod]
+    public void Parse_20260920_ToleratesDuplicateTimeseries()
+    {
+        string xml = ReadTestVector("entsoe_20260920_duplicate_timeseries.xml");
+
+        ElectricityPrice[] prices = EntsoeResponseParser.Parse(xml, NullLogger.Instance);
+
+        // The count is not 96 because positions 41, 45, 58 are missing in the test vector.
+        // This is coincidental and not related to what this test is about.
+        // This test is about tolerating duplicate timeseries.
+        Assert.HasCount(93, prices);
     }
 }

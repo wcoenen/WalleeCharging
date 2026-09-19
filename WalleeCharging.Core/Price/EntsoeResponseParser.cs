@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Xml.Linq;
+using Microsoft.Extensions.Logging;
 
 namespace WalleeCharging.Price;
 
@@ -19,7 +20,7 @@ public static class EntsoeResponseParser
     /// <exception cref="System.Xml.XmlException">Thrown when the response is not valid XML.</exception>
     /// <exception cref="FormatException">Thrown when numeric values in the response cannot be parsed.</exception>
     /// <exception cref="InvalidOperationException">Thrown when expected XML elements are not found.</exception>
-    public static ElectricityPrice[] Parse(string xmlText)
+    public static ElectricityPrice[] Parse(string xmlText, ILogger logger)
     {
         var xdoc = XDocument.Parse(xmlText);
         if (xdoc.Root == null)
@@ -27,19 +28,33 @@ public static class EntsoeResponseParser
             throw new InvalidDataException();
         }
 
-        // The entso.eu API will sometimes update the "publication document" version embedded in the XML namespace without warning
-        // and without managing multiple versions of the API.
+        // The entso.eu API will sometimes update the "publication document" version embedded in the XML namespace.
         //
         // Example namespaces:
         //      urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:0
         //      urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3
         //
+        // AFAIK there is no way to request a response with a specific known namespace.
         // So we have little choice but to accept any namespace.
         string namespaceName = xdoc.Root.Name.Namespace.NamespaceName;
 
-        // Check that there is only one time resolution in the response, and it is PT15M.
+        // For unknown reasons, the API can sometimes return multiple duplicate <TimeSeries> elements in a single response,
+        // only differing by <mRID>. For this reason, we take the first <TimeSeries> element and ignore any others.
+        XName timeSeriesElementName = XName.Get("TimeSeries", namespaceName);
+        List<XElement> timeSeriesElements = xdoc.Descendants(timeSeriesElementName).ToList();
+        if (timeSeriesElements.Count == 0)
+        {
+            throw new InvalidDataException("No <TimeSeries> element found in response from entso.eu API");
+        }
+        if (timeSeriesElements.Count > 1)
+        {
+            logger.LogWarning("Response from entso.eu API contains {count} <TimeSeries> elements. Only the first will be used.", timeSeriesElements.Count);
+        }
+        XElement timeSeriesElement = timeSeriesElements[0];
+
+        // Check that the time resolution of the time series is PT15M.
         var resolutionElementName = XName.Get("resolution", namespaceName);
-        string timeResolution = xdoc.Descendants(resolutionElementName).Single().Value;
+        string timeResolution = timeSeriesElement.Descendants(resolutionElementName).Single().Value;
         if (timeResolution != "PT15M")
         {
             throw new InvalidDataException($"Expected time resolution 'PT15M' in response from entso.eu API but got '{timeResolution}'");
@@ -82,7 +97,7 @@ public static class EntsoeResponseParser
         XName pointElementName = XName.Get("Point", namespaceName);
         XName positionElementName = XName.Get("position", namespaceName);
         XName priceElementName = XName.Get("price.amount", namespaceName);
-        List<XElement> pointElements = xdoc.Descendants(pointElementName).ToList();
+        List<XElement> pointElements = timeSeriesElement.Descendants(pointElementName).ToList();
         var pricePointList = new List<ElectricityPrice>();
 
         for (int i = 0; i < pointElements.Count; i++)
@@ -117,7 +132,7 @@ public static class EntsoeResponseParser
             // Check for improper order of the points.
             if (nextPosition != null && nextPosition <= position)
             {
-                throw new InvalidDataException("entso.eu API response has a 'Point' element with a 'position' that indicates improper order.");
+                throw new InvalidDataException($"entso.eu API response has a 'Point' element with a 'position' attribute with value '{position}' that is smaller or equal to the next Point's position, indicating improper order.");
             }
 
             // Calculate the time when this price point takes effect.

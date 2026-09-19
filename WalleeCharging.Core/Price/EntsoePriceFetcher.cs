@@ -16,11 +16,13 @@ public class EntsoePriceFetcher : IPriceFetcher
     private readonly string _apiKey;
     private readonly HttpClient _httpClient;
     private readonly ILogger _logger;
+    private readonly string _responseDebugDirectory;
 
     public EntsoePriceFetcher(IOptions<EntsoeOptions> options, ILogger<EntsoePriceFetcher> logger)
     {
         _apiKey = options.Value.ApiKey ?? throw new ArgumentException("ENTSOE ApiKey is not configured");
         _domain = options.Value.Domain ?? throw new ArgumentException("ENTSOE Domain is not configured");
+        _responseDebugDirectory = options.Value.ResponseDebugDirectory;
         _logger = logger;
         _httpClient = new HttpClient();
     }
@@ -42,7 +44,7 @@ public class EntsoePriceFetcher : IPriceFetcher
             HttpUtility.UrlEncode(periodStartText),
             HttpUtility.UrlEncode(periodStartText));
 
-        bool writeResponseDebugFile = _logger.IsEnabled(LogLevel.Debug);
+        bool problematicResponseContent = false;
         string? responseText = null;
         try
         {
@@ -50,13 +52,12 @@ public class EntsoePriceFetcher : IPriceFetcher
             responseText = await response.Content.ReadAsStringAsync();
             response.EnsureSuccessStatusCode();
 
-            var prices = EntsoeResponseParser.Parse(responseText);
-            _logger.Log(LogLevel.Debug, "Successfully parsed this response from entso.eu api: {response}", responseText);
+            var prices = EntsoeResponseParser.Parse(responseText, _logger);
             return prices;
         }
         catch (HttpRequestException e)
         {
-            writeResponseDebugFile = true;
+            problematicResponseContent = true;
             throw new PriceFetcherException("HTTP request to entso.eu API got a non-success response.", e);
         }
         catch (TaskCanceledException e)
@@ -65,19 +66,22 @@ public class EntsoePriceFetcher : IPriceFetcher
         }
         catch (Exception e) when (e is XmlException || e is FormatException || e is InvalidDataException || e is InvalidOperationException)
         {
-            writeResponseDebugFile = true;
+            problematicResponseContent = true;
             throw new PriceFetcherException("HTTP request to entso.eu API returned unexpected data", e);
         }
         finally
         {
-            if (writeResponseDebugFile && responseText != null)
+            // If the response content was problematic, or if debug logging is enabled, write the response to a file.
+            // Only the filepath is logged, to avoid cluttering the logs with potentially large XML content.
+            // This is also a good habit to avoid log forging vulnerabilties.
+            if ((problematicResponseContent || _logger.IsEnabled(LogLevel.Debug)) && responseText != null)
             {
-                string responseDebugDirectory = Path.Combine(Path.GetTempPath(), "WalleeEntsoeDebug");
-                Directory.CreateDirectory(responseDebugDirectory);
-                string responseDebugFilePath = Path.Combine(responseDebugDirectory, $"entsoe_response_{Guid.NewGuid()}.xml");
+                Directory.CreateDirectory(_responseDebugDirectory);
+                string responseDebugFilePath = Path.Combine(_responseDebugDirectory, $"entsoe_response_{Guid.NewGuid()}.xml");
                 await File.WriteAllTextAsync(responseDebugFilePath, responseText, cancellationToken);
-                
-                _logger.Log(LogLevel.Information, "Wrote entsoe.eu api response to {responseDebugFilePath}", responseDebugFilePath);
+
+                LogLevel logLevel = problematicResponseContent ? LogLevel.Warning : LogLevel.Debug;
+                _logger.Log(logLevel, "Wrote entsoe.eu api response to {responseDebugFilePath}", responseDebugFilePath);
             }
         }
     }
