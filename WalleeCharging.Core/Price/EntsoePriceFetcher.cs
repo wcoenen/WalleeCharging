@@ -42,6 +42,7 @@ public class EntsoePriceFetcher : IPriceFetcher
             HttpUtility.UrlEncode(periodStartText),
             HttpUtility.UrlEncode(periodStartText));
 
+        bool writeResponseDebugFile = _logger.IsEnabled(LogLevel.Debug);
         string? responseText = null;
         try
         {
@@ -55,8 +56,8 @@ public class EntsoePriceFetcher : IPriceFetcher
         }
         catch (HttpRequestException e)
         {
-            _logger.Log(LogLevel.Error, "Content of non-success response from entso.eu api: {response}", responseText);
-            throw new PriceFetcherException("HTTP request to entso.eu API failed.", e);
+            writeResponseDebugFile = true;
+            throw new PriceFetcherException("HTTP request to entso.eu API got a non-success response.", e);
         }
         catch (TaskCanceledException e)
         {
@@ -64,8 +65,20 @@ public class EntsoePriceFetcher : IPriceFetcher
         }
         catch (Exception e) when (e is XmlException || e is FormatException || e is InvalidDataException || e is InvalidOperationException)
         {
-            _logger.Log(LogLevel.Error, "Unparsed content of response from entso.eu api: {response}", responseText);
+            writeResponseDebugFile = true;
             throw new PriceFetcherException("HTTP request to entso.eu API returned unexpected data", e);
+        }
+        finally
+        {
+            if (writeResponseDebugFile && responseText != null)
+            {
+                string responseDebugDirectory = Path.Combine(Path.GetTempPath(), "WalleeEntsoeDebug");
+                Directory.CreateDirectory(responseDebugDirectory);
+                string responseDebugFilePath = Path.Combine(responseDebugDirectory, $"entsoe_response_{Guid.NewGuid()}.xml");
+                await File.WriteAllTextAsync(responseDebugFilePath, responseText, cancellationToken);
+                
+                _logger.Log(LogLevel.Information, "Wrote entsoe.eu api response to {responseDebugFilePath}", responseDebugFilePath);
+            }
         }
     }
 }
