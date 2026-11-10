@@ -122,7 +122,7 @@ function highlightBarsWithPriceEqualOrBelow(selectedPrice) {
     for (var i=0; i<currentChart.prices.length; i++) {
         if (currentChart.prices[i] <= selectedPrice)
         {
-            backgroundColors.push('#9ad0f5');
+            backgroundColors.push('#105d90');
         }
         else
         {
