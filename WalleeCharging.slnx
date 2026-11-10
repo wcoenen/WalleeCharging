@@ -1,0 +1,11 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="WalleeCharging.Core.Tests/WalleeCharging.Core.Tests.csproj" />
+  <Project Path="WalleeCharging.Core/WalleeCharging.Core.csproj" />
+  <Project Path="WalleeCharging.ManualTests/WalleeCharging.ManualTests.csproj" />
+  <Project Path="WalleeCharging.WebApp/WalleeCharging.WebApp.csproj" />
+</Solution>
