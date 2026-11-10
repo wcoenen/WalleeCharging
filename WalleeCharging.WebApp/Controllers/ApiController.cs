@@ -8,12 +8,10 @@ namespace WalleeCharging.WebApp;
 public class ApiController
 {
     private readonly IDatabase _database;
-    private readonly ApplianceAssistant _applianceAssistant;
 
-    public ApiController(IDatabase database, ApplianceAssistant applianceAssistant)
+    public ApiController(IDatabase database)
     {
         _database = database;
-        _applianceAssistant = applianceAssistant;
     }
 
     [HttpGet]
@@ -35,13 +33,6 @@ public class ApiController
         end ??= start.Value.AddHours(36);
 
         return _database.GetPricesAsync(start.Value, end.Value);
-    }
-    
-    [HttpGet]
-    [Route("api/hints")]
-    public IAsyncEnumerable<ApplianceHint> GetApplianceHints()
-    {
-        return _applianceAssistant.GetApplianceHints();
     }
 
 }

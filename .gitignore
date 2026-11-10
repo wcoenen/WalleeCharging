@@ -4,3 +4,4 @@ bin
 *.sqlite
 *.log
 .deploy.json
+*~
